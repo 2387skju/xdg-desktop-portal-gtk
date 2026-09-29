@@ -19,6 +19,8 @@
 #include "shell-dbus.h"
 
 #include "email.h"
+#include "emailtb.h"
+#include "emailtbdialog.h"
 #include "request.h"
 #include "utils.h"
 
@@ -34,128 +36,71 @@ compose_mail_mailto (GAppInfo       *info,
 {
   g_autofree char *enc_subject = NULL;
   g_autofree char *enc_body = NULL;
-  g_autofree char *arg = NULL;
   g_autoptr(GString) url = NULL;
   g_autoptr(GList) uris = NULL;
-  g_autoptr(GString) tb_arg = NULL;
   int i;
   gboolean success;
   const char *sep;
-  const char *is_tb_snap;
-  const char *old_cmdline;
 
   enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
   enc_body = g_uri_escape_string (body ? body : "", NULL, FALSE);
 
-  /* The commandline can be complicated, e.g.
-   * env BAMF_DESKTOP_FILE_HINT=/var/lib/snapd/.../thunderbird_thunderbird.desktop /snap/bin/thunderbird %u
-   * so just match for thunderbird.
-   */
-  old_cmdline = g_app_info_get_commandline(info);
-  if(strstr(old_cmdline, "thunderbird")) {
-    /* Construct the argument to -compose. */
-    tb_arg = g_string_new("");
-    if (addrs) {
-      g_string_append_printf(tb_arg, "to='");
-      for (i = 0; addrs[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", addrs[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    if (cc) {
-      g_string_append_printf(tb_arg, "cc='");
-      for (i = 0; cc[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", cc[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    if (bcc) {
-      g_string_append_printf(tb_arg, "bcc='");
-      for (i = 0; bcc[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", bcc[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    g_string_append_printf (tb_arg, "subject='%s',", enc_subject);
-    g_string_append_printf (tb_arg, "body='%s',", enc_body);
-    if (attachments) {
-      g_string_append_printf(tb_arg, "attachment='");
-      for (i = 0; attachments[i]; i++){
-        if (i != 0) g_string_append_printf (tb_arg, ",");
-        gchar *enc_att = (g_uri_escape_string(attachments[i], "/", 1));
-        g_string_append_printf (tb_arg, "file://%s", enc_att);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
+  url = g_string_new ("mailto:");
 
-    is_tb_snap = strstr(old_cmdline, "/snap/bin/thunderbird");
-    gchar *cmdline[] = {
-        is_tb_snap ? "/snap/bin/thunderbird" : "thunderbird",
-        "-compose",
-        tb_arg->str,
-        NULL
-    };
-    g_debug("Launching: %s %s %s", cmdline[0], cmdline[1], cmdline[2]);
-    success = g_spawn_async(NULL, cmdline, NULL, G_SPAWN_SEARCH_PATH, NULL,
-                            NULL, NULL, error);
-  } else {
-    url = g_string_new ("mailto:");
+  sep = "?";
 
-    sep = "?";
-
-    if (addrs)
+  if (addrs)
+    {
+    for (i = 0; addrs[i]; i++)
       {
-      for (i = 0; addrs[i]; i++)
+        if (i > 0)
+          g_string_append (url, ",");
+        g_string_append_printf (url, "%s", addrs[i]);
+      }
+    }
+
+  if (cc)
+    {
+      g_string_append_printf (url, "%scc=", sep);
+      sep = "&";
+
+      for (i = 0; cc[i]; i++)
         {
           if (i > 0)
             g_string_append (url, ",");
-          g_string_append_printf (url, "%s", addrs[i]);
+          g_string_append_printf (url, "%s", cc[i]);
         }
-      }
+    }
 
-    if (cc)
-      {
-        g_string_append_printf (url, "%scc=", sep);
-        sep = "&";
+  if (bcc)
+    {
+      g_string_append_printf (url, "%sbcc=", sep);
+      sep = "&";
 
-        for (i = 0; cc[i]; i++)
-          {
-            if (i > 0)
-              g_string_append (url, ",");
-            g_string_append_printf (url, "%s", cc[i]);
-          }
-      }
+      for (i = 0; bcc[i]; i++)
+        {
+          if (i > 0)
+            g_string_append (url, ",");
+          g_string_append_printf (url, "%s", bcc[i]);
+        }
+    }
 
-    if (bcc)
-      {
-        g_string_append_printf (url, "%sbcc=", sep);
-        sep = "&";
+  g_string_append_printf (url, "%ssubject=%s", sep, enc_subject);
+  g_string_append_printf (url, "&body=%s", enc_body);
 
-        for (i = 0; bcc[i]; i++)
-          {
-            if (i > 0)
-              g_string_append (url, ",");
-            g_string_append_printf (url, "%s", bcc[i]);
-          }
-      }
+  for (i = 0; attachments[i]; i++)
+    g_string_append_printf (url, "&attachment=%s", attachments[i]);
 
-    g_string_append_printf (url, "%ssubject=%s", sep, enc_subject);
-    g_string_append_printf (url, "&body=%s", enc_body);
+  uris = g_list_append (uris, url->str);
 
-    for (i = 0; attachments[i]; i++)
-      g_string_append_printf (url, "&attachment=%s", attachments[i]);
+  g_debug ("Launching: %s\n", url->str);
 
-    uris = g_list_append (uris, url->str);
-
-    g_debug ("Launching: %s\n", url->str);
-
-    success = g_app_info_launch_uris (info, uris, NULL, error);
-  }
+  success = g_app_info_launch_uris (info, uris, NULL, error);
 
   return success;
 }
 
-static gboolean
+gboolean
 compose_mail (const char * const *addrs,
               const char * const *cc,
               const char * const *bcc,
@@ -165,6 +110,9 @@ compose_mail (const char * const *addrs,
               GError     **error)
 {
   g_autoptr(GAppInfo) info = NULL;
+  const char *commandline;
+  const char *no_att[1] = { NULL };
+  gboolean is_thunderbird = FALSE;
 
   info = g_app_info_get_default_for_uri_scheme ("mailto");
   if (info == NULL)
@@ -173,7 +121,21 @@ compose_mail (const char * const *addrs,
       return FALSE;
     }
 
-  return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
+  commandline = g_app_info_get_commandline (info);
+  if (strstr (commandline, "thunderbird") )
+    is_thunderbird = TRUE;
+
+  if (is_thunderbird && attachments != no_att)
+    {
+      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
+        return TRUE;
+    }
+  else
+    {
+      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
+        return TRUE;
+    }
+  return FALSE;
 }
 
 static gboolean
@@ -186,18 +148,30 @@ handle_compose_email (XdpImplEmail *object,
 {
   g_autoptr(Request) request = NULL;
   const char *sender;
+  GVariantBuilder opt_builder;
+  guint response = 0;
   g_autoptr(GError) error = NULL;
   const char *address = NULL;
   const char *subject = NULL;
   const char *body = NULL;
   const char *no_att[1] = { NULL };
   const char **attachments = no_att;
-  guint response = 0;
-  GVariantBuilder opt_builder;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
   const char * const *bcc = NULL;
   g_auto(GStrv) addrs = NULL;
+
+  g_autoptr(GAppInfo) info = NULL;
+  gboolean is_thunderbird = FALSE;
+  const char *commandline;
+
+  info = g_app_info_get_default_for_uri_scheme ("mailto");
+  if (info != NULL)
+    {
+      commandline = g_app_info_get_commandline (info);
+      if (strstr (commandline, "thunderbird") )
+        is_thunderbird = TRUE;
+    }
 
   sender = g_dbus_method_invocation_get_sender (invocation);
 
@@ -220,10 +194,9 @@ handle_compose_email (XdpImplEmail *object,
           addrs[0] = g_strdup (address);
           memcpy (addrs + 1, addresses, sizeof (char *) * (len + 1));
         }
-        
       else
         {
-          addrs = g_new (char *, 2); 
+          addrs = g_new (char *, 2);
           addrs[0] = g_strdup (address);
           addrs[1] = NULL;
         }
@@ -231,14 +204,26 @@ handle_compose_email (XdpImplEmail *object,
   else
     addrs = g_strdupv ((char **)addresses);
 
-  if (!compose_mail ((const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
-    response = 2;
+  commandline = g_app_info_get_commandline (info);
+  if (strstr (commandline, "thunderbird") )
+    is_thunderbird = TRUE;
 
-  g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
-  xdp_impl_email_complete_compose_email (object,
-                                         invocation,
-                                         response,
-                                         g_variant_builder_end (&opt_builder));
+  if (attachments != no_att && is_thunderbird )
+    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options,
+                                    (const char * const *)addrs, cc, bcc, subject, body, attachments);
+  else
+    {
+      if (!compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
+        response = 2;
+
+      g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
+      xdp_impl_email_complete_compose_email (object,
+                                             invocation,
+                                             response,
+                                             g_variant_builder_end (&opt_builder));
+
+      return TRUE;
+    }
 
   return TRUE;
 }

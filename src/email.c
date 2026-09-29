@@ -23,7 +23,7 @@
 #include "utils.h"
 
 static gboolean
-compose_mail_mailto (GAppInfo       *info,
+compose_mail_thunderbird (GAppInfo       *info,
                      const char * const *addrs,
                      const char * const *cc,
                      const char * const *bcc,
@@ -35,122 +35,147 @@ compose_mail_mailto (GAppInfo       *info,
   g_autofree char *enc_subject = NULL;
   g_autofree char *enc_body = NULL;
   g_autofree char *arg = NULL;
-  g_autoptr(GString) url = NULL;
-  g_autoptr(GList) uris = NULL;
   g_autoptr(GString) tb_arg = NULL;
   int i;
   gboolean success;
-  const char *sep;
   const char *is_tb_snap;
   const char *old_cmdline;
 
   enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
   enc_body = g_uri_escape_string (body ? body : "", NULL, FALSE);
+  tb_arg = g_string_new ("");
+
+  if (addrs)
+    {
+      g_string_append_printf (tb_arg, "to='");
+      for (i = 0; addrs[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", addrs[i]);
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  if (cc)
+    {
+      g_string_append_printf (tb_arg, "cc='");
+      for (i = 0; cc[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", cc[i]);
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  if (bcc)
+    {
+      g_string_append_printf (tb_arg, "bcc='");
+      for (i = 0; bcc[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", bcc[i]);
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  g_string_append_printf (tb_arg, "subject='%s',", enc_subject);
+  g_string_append_printf (tb_arg, "body='%s',", enc_body);
+
+  if (attachments)
+    {
+      g_string_append_printf (tb_arg, "attachment='");
+      for (i = 0; attachments[i]; i++)
+        {
+          if (i != 0) g_string_append_printf (tb_arg, ",");
+          gchar *enc_att = (g_uri_escape_string (attachments[i], "/", 1));
+          g_string_append_printf (tb_arg, "file://%s", enc_att);
+        }
+      g_string_append_printf(tb_arg, "',");
+    }
 
   /* The commandline can be complicated, e.g.
    * env BAMF_DESKTOP_FILE_HINT=/var/lib/snapd/.../thunderbird_thunderbird.desktop /snap/bin/thunderbird %u
    * so just match for thunderbird.
    */
-  old_cmdline = g_app_info_get_commandline(info);
-  if(strstr(old_cmdline, "thunderbird")) {
-    /* Construct the argument to -compose. */
-    tb_arg = g_string_new("");
-    if (addrs) {
-      g_string_append_printf(tb_arg, "to='");
-      for (i = 0; addrs[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", addrs[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    if (cc) {
-      g_string_append_printf(tb_arg, "cc='");
-      for (i = 0; cc[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", cc[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    if (bcc) {
-      g_string_append_printf(tb_arg, "bcc='");
-      for (i = 0; bcc[i]; i++){
-        g_string_append_printf(tb_arg, "%s,", bcc[i]);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
-    g_string_append_printf (tb_arg, "subject='%s',", enc_subject);
-    g_string_append_printf (tb_arg, "body='%s',", enc_body);
-    if (attachments) {
-      g_string_append_printf(tb_arg, "attachment='");
-      for (i = 0; attachments[i]; i++){
-        if (i != 0) g_string_append_printf (tb_arg, ",");
-        gchar *enc_att = (g_uri_escape_string(attachments[i], "/", 1));
-        g_string_append_printf (tb_arg, "file://%s", enc_att);
-      }
-      g_string_append_printf(tb_arg, "',");
-    }
+  old_cmdline = g_app_info_get_commandline (info);
+  is_tb_snap = strstr (old_cmdline, "/snap/bin/thunderbird");
+  gchar *cmdline[] = {
+      is_tb_snap ? "/snap/bin/thunderbird" : "thunderbird",
+      "-compose",
+      tb_arg->str,
+      NULL
+  };
 
-    is_tb_snap = strstr(old_cmdline, "/snap/bin/thunderbird");
-    gchar *cmdline[] = {
-        is_tb_snap ? "/snap/bin/thunderbird" : "thunderbird",
-        "-compose",
-        tb_arg->str,
-        NULL
-    };
-    g_debug("Launching: %s %s %s", cmdline[0], cmdline[1], cmdline[2]);
-    success = g_spawn_async(NULL, cmdline, NULL, G_SPAWN_SEARCH_PATH, NULL,
-                            NULL, NULL, error);
-  } else {
-    url = g_string_new ("mailto:");
+  g_debug ("Launching: %s %s %s", cmdline[0], cmdline[1], cmdline[2]);
+  success = g_spawn_async (NULL, cmdline, NULL, G_SPAWN_SEARCH_PATH, NULL,
+                           NULL, NULL, error);
+  return success;
+}
 
-    sep = "?";
 
-    if (addrs)
+static gboolean
+compose_mail_mailto (GAppInfo       *info,
+                     const char * const *addrs,
+                     const char * const *cc,
+                     const char * const *bcc,
+                     const char     *subject,
+                     const char     *body,
+                     const char    **attachments,
+                     GError        **error)
+{
+  g_autofree char *enc_subject = NULL;
+  g_autofree char *enc_body = NULL;
+  g_autoptr(GString) url = NULL;
+  g_autoptr(GList) uris = NULL;
+  int i;
+  gboolean success;
+  const char *sep;
+
+  enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
+  enc_body = g_uri_escape_string (body ? body : "", NULL, FALSE);
+
+  url = g_string_new ("mailto:");
+
+  sep = "?";
+
+  if (addrs)
+    {
+    for (i = 0; addrs[i]; i++)
       {
-      for (i = 0; addrs[i]; i++)
+        if (i > 0)
+          g_string_append (url, ",");
+        g_string_append_printf (url, "%s", addrs[i]);
+      }
+    }
+
+  if (cc)
+    {
+      g_string_append_printf (url, "%scc=", sep);
+      sep = "&";
+
+      for (i = 0; cc[i]; i++)
         {
           if (i > 0)
             g_string_append (url, ",");
-          g_string_append_printf (url, "%s", addrs[i]);
+          g_string_append_printf (url, "%s", cc[i]);
         }
-      }
+    }
 
-    if (cc)
-      {
-        g_string_append_printf (url, "%scc=", sep);
-        sep = "&";
+  if (bcc)
+    {
+      g_string_append_printf (url, "%sbcc=", sep);
+      sep = "&";
 
-        for (i = 0; cc[i]; i++)
-          {
-            if (i > 0)
-              g_string_append (url, ",");
-            g_string_append_printf (url, "%s", cc[i]);
-          }
-      }
+      for (i = 0; bcc[i]; i++)
+        {
+          if (i > 0)
+            g_string_append (url, ",");
+          g_string_append_printf (url, "%s", bcc[i]);
+        }
+    }
 
-    if (bcc)
-      {
-        g_string_append_printf (url, "%sbcc=", sep);
-        sep = "&";
+  g_string_append_printf (url, "%ssubject=%s", sep, enc_subject);
+  g_string_append_printf (url, "&body=%s", enc_body);
 
-        for (i = 0; bcc[i]; i++)
-          {
-            if (i > 0)
-              g_string_append (url, ",");
-            g_string_append_printf (url, "%s", bcc[i]);
-          }
-      }
+  for (i = 0; attachments[i]; i++)
+    g_string_append_printf (url, "&attachment=%s", attachments[i]);
 
-    g_string_append_printf (url, "%ssubject=%s", sep, enc_subject);
-    g_string_append_printf (url, "&body=%s", enc_body);
+  uris = g_list_append (uris, url->str);
 
-    for (i = 0; attachments[i]; i++)
-      g_string_append_printf (url, "&attachment=%s", attachments[i]);
+  g_debug ("Launching: %s\n", url->str);
 
-    uris = g_list_append (uris, url->str);
-
-    g_debug ("Launching: %s\n", url->str);
-
-    success = g_app_info_launch_uris (info, uris, NULL, error);
-  }
+  success = g_app_info_launch_uris (info, uris, NULL, error);
 
   return success;
 }
@@ -164,7 +189,9 @@ compose_mail (const char * const *addrs,
               const char **attachments,
               GError     **error)
 {
+
   g_autoptr(GAppInfo) info = NULL;
+  const char *no_att[1] = { NULL };
 
   info = g_app_info_get_default_for_uri_scheme ("mailto");
   if (info == NULL)
@@ -173,6 +200,27 @@ compose_mail (const char * const *addrs,
       return FALSE;
     }
 
+  // handler for thunderbird, only when a file is attached
+  if (attachments != no_att)
+    {
+      g_autoptr(GAppInfo) info = NULL;
+      const char *commandline;
+
+      info = g_app_info_get_default_for_uri_scheme ("mailto");
+      if (info == NULL)
+        {
+          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
+          return FALSE;
+        }
+
+      commandline = g_app_info_get_commandline (info);
+
+      if (strstr (commandline, "thunderbird"))
+        {
+          g_debug("thunderbird extra handler started");
+          return compose_mail_thunderbird (info, addrs, cc, bcc, subject, body, attachments, error);
+        }
+   }
   return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
 }
 

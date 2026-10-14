@@ -7,9 +7,9 @@
 
 #include <glib/gi18n.h>
 
-#include "emaildialog.h"
+#include "emailtbdialog.h"
 
-struct _EmailDialog {
+struct _EmailTbDialog {
   GtkWindow parent;
 
   GtkWidget *heading;
@@ -23,7 +23,7 @@ struct _EmailDialog {
   GSList *list_items; // List of GtkWidget
 };
 
-struct _EmailDialogClass {
+struct _EmailTbDialogClass {
   GtkWindowClass parent_class;
 };
 
@@ -34,26 +34,26 @@ enum {
 
 static guint signals[LAST_SIGNAL];
 
-G_DEFINE_TYPE (EmailDialog, email_dialog, GTK_TYPE_WINDOW)
+G_DEFINE_TYPE (EmailTbDialog, email_tb_dialog, GTK_TYPE_WINDOW)
 
 static void
-email_dialog_init (EmailDialog *dialog)
+email_tb_dialog_init (EmailTbDialog *dialog)
 {
   gtk_widget_init_template (GTK_WIDGET (dialog));
 }
 
 static void
-email_dialog_finalize (GObject *object)
+email_tb_dialog_finalize (GObject *object)
 {
-  EmailDialog *dialog = ACCOUNT_DIALOG (object);
+  EmailTbDialog *dialog = ACCOUNT_DIALOG (object);
 
-  G_OBJECT_CLASS (email_dialog_parent_class)->finalize (object);
+  G_OBJECT_CLASS (email_tb_dialog_parent_class)->finalize (object);
 }
 
 
 static void
 button_clicked (GtkWidget *button,
-                EmailDialog *dialog)
+                EmailTbDialog *dialog)
 {
   int response;
 
@@ -71,7 +71,7 @@ button_clicked (GtkWidget *button,
 
 static void
 info_button_clicked (GtkWidget *button,
-               EmailDialog *dialog)
+               EmailTbDialog *dialog)
 {
   if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_text)) == 0)
     gtk_widget_set_visible (GTK_WIDGET (dialog->info_text), 1);
@@ -81,12 +81,12 @@ info_button_clicked (GtkWidget *button,
 }
 
 static void
-email_dialog_class_init (EmailDialogClass *class)
+email_tb_dialog_class_init (EmailTbDialogClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
 
-  object_class->finalize = email_dialog_finalize;
+  object_class->finalize = email_tb_dialog_finalize;
 
 
   signals[DONE] = g_signal_new ("done",
@@ -98,28 +98,28 @@ email_dialog_class_init (EmailDialogClass *class)
                                 G_TYPE_NONE, 1,
                                 G_TYPE_INT);
 
-  gtk_widget_class_set_template_from_resource (widget_class, "/org/freedesktop/portal/desktop/gtk/emaildialog.ui");
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, yes_button);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, no_button);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, heading);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, list_footer);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, info_text);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, info_button);
-  gtk_widget_class_bind_template_child (widget_class, EmailDialog, list_files);
+  gtk_widget_class_set_template_from_resource (widget_class, "/org/freedesktop/portal/desktop/gtk/emailtbdialog.ui");
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_button);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, no_button);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, heading);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, list_footer);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_button);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, list_files);
 
   gtk_widget_class_bind_template_callback (widget_class, button_clicked);
   gtk_widget_class_bind_template_callback (widget_class, info_button_clicked);
 }
 
-EmailDialog *
-email_dialog_new (const char **attachments_text, const char **attachments_links)
+EmailTbDialog *
+email_tb_dialog_new (const char **attachments_text, const char **attachments_links)
 {
-  EmailDialog *dialog;
+  EmailTbDialog *dialog;
   GString *heading = g_string_new ("");
   GString *info_text = g_string_new ("");
   g_autoptr(GError) error = NULL;
 
-  dialog = g_object_new (email_dialog_get_type (), NULL);
+  dialog = g_object_new (email_tb_dialog_get_type (), NULL);
 
   dialog->list_items = NULL;
   GtkWidget *file_item = NULL;

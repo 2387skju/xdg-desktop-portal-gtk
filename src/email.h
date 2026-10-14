@@ -23,3 +23,4 @@
 #include <gio/gio.h>
 
 gboolean email_init (GDBusConnection *bus, GError **error);
+gboolean compose_mail_pre ( GAppInfo *info, GVariant *arg_options, gboolean attached_files_allowed);

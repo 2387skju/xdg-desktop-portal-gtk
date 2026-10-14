@@ -45,7 +45,7 @@ email_dialog_init (EmailDialog *dialog)
 static void
 email_dialog_finalize (GObject *object)
 {
-  EmailDialog *dialog = ACCOUNT_DIALOG (object);
+  EmailDialog *dialog = EMAIL_DIALOG (object);
 
   G_OBJECT_CLASS (email_dialog_parent_class)->finalize (object);
 }
@@ -112,11 +112,12 @@ email_dialog_class_init (EmailDialogClass *class)
 }
 
 EmailDialog *
-email_dialog_new (const char **attachments_text, const char **attachments_links)
+email_dialog_new (const char **attachments_text,
+                  const char **attachments_links)
 {
   EmailDialog *dialog;
   GString *heading = g_string_new ("");
-  GString *info_text = g_string_new ("");
+  GString *yes_button_text = g_string_new ("");
   g_autoptr(GError) error = NULL;
 
   dialog = g_object_new (email_dialog_get_type (), NULL);
@@ -128,7 +129,7 @@ email_dialog_new (const char **attachments_text, const char **attachments_links)
     {
       GString *text = g_string_new ("");
       g_string_append_printf (text, "%d.) %s", (i+1), attachments_text[i]);
-      file_item = gtk_link_button_new_with_label (attachments_links[i], text->str);//attachments_text[i]);
+      file_item = gtk_link_button_new_with_label (attachments_links[i], text->str);
       g_string_free (text, TRUE);
       gtk_widget_set_valign (file_item, GTK_ALIGN_START);
       gtk_widget_set_halign (file_item, GTK_ALIGN_START);
@@ -142,14 +143,13 @@ email_dialog_new (const char **attachments_text, const char **attachments_links)
   g_string_append_printf (heading, _("Share these %d of your private files / data by E-Mail?"), files_counter);
   gtk_label_set_label (GTK_LABEL (dialog->heading), heading->str);
 
-  g_string_append_printf (info_text, _("Info: \nThis dialog box appears because an application or website is attempting to compose a new email \nand wants to attach your private files in the message. These files may contain private or sensitive information:\nSome examples: \"your-secret-file.txt\" , \"~/.ssh/id_rsa\" , login-data, passwords or sensible system informationen. \nYou should therefore check what is being sent. You can click on the file to open it. \nTo be absolutely sure, you should also double-check the file list in %s. \n\nMore technical details: \nThis dialog appears only when using email program %s. \nThe technical reason for this is, that the request is processed via the mailto: protocol. \nIt is impossible to determine which application or website is making the request. \nTherefore, it is unclear whether the request is trustworthy. \n%s was manually integrated to be compatible with this technical implementation\n (it does not normally support file attachments via mailto:). That is why this dialog box was added.\n Other email programs already have their own conspicuous warnings built in."), "Thunderbird", "Thunderbird", "Thunderbird");
-  gtk_label_set_label (GTK_LABEL (dialog->info_text), info_text->str);
+  g_string_append_printf (yes_button_text, _("_Yes, send %d private files"), files_counter);
+  gtk_button_set_label (GTK_BUTTON (dialog->yes_button), yes_button_text->str);
 
   gtk_widget_show_all(GTK_WIDGET(dialog->list_files));
 
-
   //@TODO?? NEEDED? g_free(attachments_list); adn the other?
   g_string_free (heading, TRUE);
-  g_string_free (info_text, TRUE);
+  g_string_free (yes_button_text, TRUE);
   return dialog;
 }

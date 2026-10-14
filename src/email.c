@@ -34,6 +34,7 @@ typedef struct {
 
   int response;
   GVariant *arg_options;
+  const char **attachments_links_processed;
 } EmailDialogHandle;
 
 static void
@@ -96,16 +97,16 @@ char*
 clean_up_parent_path_from_file_path (const char* input)
 {
   /* Replace path-element /../ to make the path bedder readable:
-   * This function only works with absolute pathes, so it must start with "/".
-   * Not supported are: relative pathes or URI-pathes (e.g. file:// or percent-encoded)
-   * This should also prevent one kind of illusion / attack. Example:
-   * Input-Path:  "/home/user/file-ok.txt                          /../user/secret.txt"
-   * Output-Path: "/home/user/secret.txt"
-   * Due to the length of the filenames (which include lot of spaces),
-   * the user might overlook the actual path (e.g., also because of scroll bars in GUI).
+   *   This function only works with absolute pathes, so it must start with "/".
+   *   Not supported are: relative pathes or URI-pathes (e.g. file:// or percent-encoded)
+   *   This should also prevent one kind of illusion / attack. Example:
+   *   Input-Path:  "/home/user/file-ok.txt                          /../user/secret.txt"
+   *   Output-Path: "/home/user/secret.txt"
+   *   Due to the length of the filenames (which include lot of spaces),
+   *   the user might overlook the actual path (e.g., also because of scroll bars in GUI).
   */
 
-  if (input[0] == '\0') return input;
+  if (input[0] == '\0') return "";
   if (input[0] != '/' )
     {
       g_warning ("Error in %s with %s (must start with /)", __func__, input);
@@ -123,7 +124,7 @@ clean_up_parent_path_from_file_path (const char* input)
         splited[i] = "";
         int j = 0;
         gboolean remove_done = FALSE;
-        // search & remove the path part before:
+        // search & remove the path part before
         for (j = i; j>0; j--)
           {
           if (splited[j][0] != '\0')
@@ -140,7 +141,7 @@ clean_up_parent_path_from_file_path (const char* input)
           }
       }
     }
-  // pack new string:
+  // pack new string
   for (i = 0;splited[i];i++)
     {
       if (splited[i][0]!='\0')
@@ -155,7 +156,7 @@ clean_up_parent_path_from_file_path (const char* input)
 const char *
 get_uri_for_tb_and_check_exists (const char *input)
 {
-    if (!g_file_test(input, G_FILE_TEST_EXISTS))
+    if (!g_file_test (input, G_FILE_TEST_EXISTS))
       {
         g_warning ("attachment: skipped this file (does not exists): %s ", input);
         return NULL;
@@ -169,7 +170,7 @@ get_uri_for_tb_and_check_exists (const char *input)
     GString *file_esc = g_string_new ((char *) file_uri);
     g_string_replace (file_esc, "\'", "%27", 0); // escape ' (this is only for a very rare problem: e.g. attach this two filenames, in this exact order: a' and abc )
     g_string_replace (file_esc, ",", "%2C", 0); // escape , (needed to handle multiple files)
-    if (!g_file_test(g_filename_from_uri (file_esc->str,NULL,NULL), G_FILE_TEST_EXISTS))
+    if (!g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
       {
         // this check is a dublicate (to check before), and can be removed
         g_warning ("Skipped this file (does not exists): %s ", file_esc->str);
@@ -185,7 +186,7 @@ escape_maybe_single_quote_comma (const char* input)
 {
   /* This is just for future use:
    * In Thunderbird the string ', in E-Mail-adress is a problematic combination.
-   * But actually character , in E-Mail-adress is not allowed, in xdg-desktop.
+   * Looks like actually character , in E-Mail-adress is not allowed, in xdg-desktop.
    * So, this is not a real problem, at the moment.
    */
   if (strchr (input, ',') != NULL && strchr (input, '\'') != NULL)
@@ -224,7 +225,7 @@ compose_mail_thunderbird (GAppInfo       *info,
   enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
 
   // Thunderbird interpret in body HTML-Code (only in this start-way ; not by mailto:).
-  // @TODO: maybe only characters < > are needed to replace?
+  // Maybe just characters < > are required to be replaced.
   if (body)
     for (i = 0; body[i]; i++)
       {
@@ -250,6 +251,25 @@ compose_mail_thunderbird (GAppInfo       *info,
         }
       }
   enc2_body = g_uri_escape_string (enc1_body->str ? enc1_body->str : "", NULL, FALSE);
+
+  // First start with attachment:
+  //   This maybe catches some malicous input data. Example:
+  //     Previous use of attachment= inside of an Email-Adresse.
+  //     That shouldn't work, but just in case...
+  if (attachments)
+    {
+      g_string_append_printf (tb_arg, "attachment='");
+      for (i = 0; attachments[i]; i++)
+        {
+          if (i != 0)
+            g_string_append_printf (tb_arg, ",");
+          /*already done before (do not call it twice):
+          const char *uri = get_uri_for_tb_and_check_exists (attachments[i]);
+          g_string_append_printf (tb_arg, "%s", uri);*/
+          g_string_append_printf (tb_arg, "%s", attachments[i]);
+        }
+        g_string_append_printf(tb_arg, "',");
+    }
 
   if (addrs)
     {
@@ -277,19 +297,6 @@ compose_mail_thunderbird (GAppInfo       *info,
 
   g_string_append_printf (tb_arg, "subject='%s',", enc_subject);
   g_string_append_printf (tb_arg, "body=%s,", enc2_body);
-
-  if (attachments)
-    {
-      g_string_append_printf (tb_arg, "attachment='");
-      for (i = 0; attachments[i]; i++)
-        {
-          if (i != 0)
-            g_string_append_printf (tb_arg, ",");
-          const char *uri = get_uri_for_tb_and_check_exists (attachments[i]);
-          g_string_append_printf (tb_arg, "%s", uri);
-        }
-        g_string_append_printf(tb_arg, "',");
-    }
 
   /* The commandline can be complicated, e.g.
    * env BAMF_DESKTOP_FILE_HINT=/var/lib/snapd/.../thunderbird_thunderbird.desktop /snap/bin/thunderbird %u
@@ -388,19 +395,15 @@ compose_mail_mailto (GAppInfo       *info,
 }
 
 static gboolean
-compose_mail_pre ( GAppInfo *info,
-                   GVariant *arg_options,
-                   gboolean attached_files_allowed)
+compose_mail_pre (GAppInfo *info,
+                  GVariant *arg_options,
+                  const char **attachments_links)
 {
-  /*@TODO: Differents between attachments_list_text / attachments_list_link to variable "attachments"! :
-   *         In the Dialog-GUI we used list of file-items.
-   *         In this List was /../ in the file-path removed (=clean_up_parent_path_from_file_path())
-   *         We should also do this either here with variable "attachments".
-   *         Because they should be no differents between the shown path in GUI before, and the finally used one.
-   *         ( Normally this is no important, becuase both should result in the same, in total ;
-   *           But maybe relevant this in case of Bugs, or attacks etc.)
+  /*  About variable attachments_links:
+   *    We do not extract this again from arg_options.
+   *    Because it was maybe modified/cleaned-up before.
+   *    (currently only relevant for Thunderbird (EmailTbDialog)).
    */
-
   gboolean is_thunderbird = FALSE;
   const char *commandline;
   commandline = g_app_info_get_commandline (info);
@@ -411,7 +414,6 @@ compose_mail_pre ( GAppInfo *info,
   const char *subject = NULL;
   const char *body = NULL;
   const char *no_att[1] = { NULL };
-  const char **attachments = no_att;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
   const char * const *bcc = NULL;
@@ -423,8 +425,6 @@ compose_mail_pre ( GAppInfo *info,
   g_variant_lookup (arg_options, "bcc", "^a&s", &bcc);
   g_variant_lookup (arg_options, "subject", "&s", &subject);
   g_variant_lookup (arg_options, "body", "&s", &body);
-  if (attached_files_allowed)
-    g_variant_lookup (arg_options, "attachments", "^a&s", &attachments);
 
   if (address)
     {
@@ -445,12 +445,16 @@ compose_mail_pre ( GAppInfo *info,
   else
     addrs = g_strdupv ((char **)addresses);
 
-  if (is_thunderbird && attached_files_allowed)
-    if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
-      return TRUE;
+  if (is_thunderbird && attachments_links != no_att)
+    {
+      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
+        return TRUE;
+    }
   else
-    if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
-      return TRUE;
+    {
+      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
+        return TRUE;
+    }
 
   return FALSE;
 }
@@ -461,7 +465,7 @@ email_dialog_done (GtkWidget *widget,
                    gpointer user_data)
 {
   EmailDialogHandle *handle = user_data;
-  gboolean attached_files_allowed = FALSE;
+  const char *no_att[1] = { NULL };
 
   switch (response)
     {
@@ -470,18 +474,20 @@ email_dialog_done (GtkWidget *widget,
        /* Fall through */
       case GTK_RESPONSE_DELETE_EVENT:
         handle->response = 1;
+        handle->attachments_links_processed = no_att;
         break;
       case GTK_RESPONSE_CANCEL:
         handle->response = 1;
+        handle->attachments_links_processed = no_att;
         break;
 
       case GTK_RESPONSE_NO:
         handle->response = 1; // or should this bedder 0
+        handle->attachments_links_processed = no_att;
         break;
 
       case GTK_RESPONSE_YES:
         handle->response = 0;
-        attached_files_allowed = TRUE;
         break;
     }
 
@@ -489,7 +495,7 @@ email_dialog_done (GtkWidget *widget,
     {
       g_autoptr(GAppInfo) info = NULL;
       info = g_app_info_get_default_for_uri_scheme ("mailto");
-      if (compose_mail_pre ( info, handle->arg_options, attached_files_allowed))
+      if (compose_mail_pre ( info, handle->arg_options, handle->attachments_links_processed))
         handle->response = 0;
       else
         handle->response = 2;
@@ -515,10 +521,9 @@ list_the_attachments (const char ** attachments, gboolean get_uri)
         }
       g_free (file);
     }
-  //g_auto(GStrv) array = g_strv_builder_end (builder);;
-  return (const char **) g_strv_builder_end (builder);;
-
+  return (const char **) g_strv_builder_end (builder);
 }
+
 static gboolean
 handle_compose_email (XdpImplEmail *object,
                       GDBusMethodInvocation *invocation,
@@ -543,7 +548,6 @@ handle_compose_email (XdpImplEmail *object,
   const char *no_att[1] = { NULL };
   const char **attachments = no_att;
   g_autoptr(GAppInfo) info = NULL;
-  gboolean show_confirm_attachments_dialog = FALSE; // This is only for Thunderbird needed
   gboolean is_thunderbird = FALSE;
 
   sender = g_dbus_method_invocation_get_sender (invocation);
@@ -565,13 +569,9 @@ handle_compose_email (XdpImplEmail *object,
   if (strstr (commandline, "thunderbird") )
     is_thunderbird = TRUE;
 
-  if (attachments != no_att)
-    if (is_thunderbird )
-      show_confirm_attachments_dialog = TRUE;  // handler for thunderbird, only when a file is attached
-
-  if (!show_confirm_attachments_dialog)
+  if (attachments == no_att || !is_thunderbird)
     {
-      if (!compose_mail_pre (info, arg_options, TRUE))
+      if (!compose_mail_pre (info, arg_options, attachments))
         response = 2;
 
       g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
@@ -584,7 +584,7 @@ handle_compose_email (XdpImplEmail *object,
     }
   else
     {
-      g_debug("show attachment confirm Dialog");
+      g_debug ("show attachment confirm Dialog");
       // This Dialog is only for Thunderbird needed
       if (arg_parent_window)
         {
@@ -612,13 +612,13 @@ handle_compose_email (XdpImplEmail *object,
       gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (fake_parent));
       gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
 
-
       handle = g_new0 (EmailDialogHandle, 1);
       handle->impl = object;
       handle->invocation = invocation;
       handle->request = g_object_ref (request);
       handle->dialog = g_object_ref (dialog);
       handle->external_parent = external_parent;
+      handle->attachments_links_processed = attachments_list_link;
       handle->arg_options = g_variant_ref (arg_options);
 
       g_signal_connect (request, "handle-close", G_CALLBACK (handle_close), handle);

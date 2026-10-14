@@ -102,15 +102,14 @@ compose_mail_mailto (GAppInfo       *info,
 }
 
 gboolean
-compose_mail_pre ( GAppInfo *info, GVariant *arg_options, gboolean attached_files_allowed)
+compose_mail_pre (GAppInfo *info,
+                  GVariant *arg_options,
+                  const char **attachments_links)
 {
-  /*@TODO: Differents between attachments_list_text / attachments_list_link to variable "attachments"! :
-   *         In the Dialog-GUI we used list of file-items.
-   *         In this List was /../ in the file-path removed (=clean_up_parent_path_from_file_path())
-   *         We should also do this either here with variable "attachments".
-   *         Because they should be no differents between the shown path in GUI before, and the finally used one.
-   *         ( Normally this is no important, becuase both should result in the same, in total ;
-   *           But maybe relevant this in case of Bugs, or attacks etc.)
+  /*  About variable attachments_links:
+   *    We do not extract this again from arg_options.
+   *    Because it was maybe modified/cleaned-up before.
+   *    (currently only relevant for Thunderbird (EmailTbDialog)).
    */
 
   gboolean is_thunderbird = FALSE;
@@ -123,7 +122,6 @@ compose_mail_pre ( GAppInfo *info, GVariant *arg_options, gboolean attached_file
   const char *subject = NULL;
   const char *body = NULL;
   const char *no_att[1] = { NULL };
-  const char **attachments = no_att;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
   const char * const *bcc = NULL;
@@ -135,8 +133,6 @@ compose_mail_pre ( GAppInfo *info, GVariant *arg_options, gboolean attached_file
   g_variant_lookup (arg_options, "bcc", "^a&s", &bcc);
   g_variant_lookup (arg_options, "subject", "&s", &subject);
   g_variant_lookup (arg_options, "body", "&s", &body);
-  if (attached_files_allowed)
-    g_variant_lookup (arg_options, "attachments", "^a&s", &attachments);
 
   if (address)
     {
@@ -157,14 +153,14 @@ compose_mail_pre ( GAppInfo *info, GVariant *arg_options, gboolean attached_file
   else
     addrs = g_strdupv ((char **)addresses);
 
-  if (is_thunderbird && attached_files_allowed)
+  if (is_thunderbird && attachments_links != no_att)
     {
-      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
+      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
         return TRUE;
     }
   else
     {
-      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
+      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
         return TRUE;
     }
   return FALSE;
@@ -212,7 +208,7 @@ handle_compose_email (XdpImplEmail *object,
     return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options);
   else
     {
-      if (!compose_mail_pre (info, arg_options, TRUE))
+      if (!compose_mail_pre (info, arg_options, attachments))
         response = 2;
 
       g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);

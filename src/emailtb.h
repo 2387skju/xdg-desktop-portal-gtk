@@ -22,6 +22,18 @@
 
 #include <gio/gio.h>
 
-gboolean compose_mail_thunderbird (GAppInfo       *info, const char * const *addrs, const char * const *cc, const char * const *bcc, const char     *subject, const char     *body, const char    **attachments, GError        **error);
+gboolean compose_mail_thunderbird (GAppInfo       *info,
+                                   const char * const *addrs,
+                                   const char * const *cc,
+                                   const char * const *bcc,
+                                   const char     *subject,
+                                   const char     *body,
+                                   const char    **attachments,
+                                   GError        **error);
 
-gboolean handle_compose_email_tb (XdpImplEmail *object, GDBusMethodInvocation *invocation, const char *arg_handle, const char *arg_app_id, const char *arg_parent_window, GVariant *arg_options);
+gboolean handle_compose_email_tb (XdpImplEmail *object,
+                                  GDBusMethodInvocation *invocation,
+                                  const char *arg_handle,
+                                  const char *arg_app_id,
+                                  const char *arg_parent_window,
+                                  GVariant *arg_options);

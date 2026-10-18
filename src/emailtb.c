@@ -25,6 +25,14 @@
 #include "utils.h"
 #include "externalwindow.h"
 
+//@TODO: Check if a file exists should be improved:
+//       Currently there is a check for file exists:
+//        - It will be shown in the list (but not useable link to click).
+//        - It will be skiped, when starting thunderbird.
+//        - There is no message for the user, that a file is missing.
+//       And also i'm not sure if this is really a good idea (, for security reasons).
+//       I prefer now to just check file exists after clicking "send files".
+
 typedef struct {
   XdpImplEmail *impl;
   GDBusMethodInvocation *invocation;
@@ -34,8 +42,13 @@ typedef struct {
   ExternalWindow *external_parent;
 
   int response;
-  GVariant *arg_options;
+  GVariant *arg_options; // this is the origin of variabel cc, bcc,...
   const char **attachments_links_processed;
+  const char * const *addrs;
+  const char * const *cc;
+  const char * const *bcc;
+  const char  *subject;
+  const char  *body;
 } EmailTbDialogHandle;
 
 static void
@@ -47,6 +60,13 @@ email_tb_dialog_handle_free (gpointer data)
   g_object_unref (handle->request);
   g_object_unref (handle->dialog);
   g_variant_unref (handle->arg_options);
+  /* @TODO: why we can free handle->attachments_links_processed ?
+   * The other returned value from list_the_attachments() (=attachments_list_text), was possible to free,
+   * but this not. Why?
+   *   not possible to be freed (SIGSEGV, Segmentation fault):
+   *   g_strfreev ((gchar **)handle->attachments_links_processed);
+   */
+  g_strfreev ((gchar **)handle->addrs);
 
   g_free (handle);
 }
@@ -97,14 +117,11 @@ handle_close (XdpImplRequest *object,
 char*
 clean_up_parent_path_from_file_path (const char* input)
 {
-  /* Replace path-element /../ to make the path bedder readable:
-   *   This function only works with absolute pathes, so it must start with "/".
+  /* Replace path-element /../ to make the path bedder readable. Example:
+   *   Input:  "/home/user/file-ok.txt        /../user/secret.txt"
+   *   Output: "/home/user/secret.txt"
+   *   This function only works with absolute pathes: It must start with "/".
    *   Not supported are: relative pathes or URI-pathes (e.g. file:// or percent-encoded)
-   *   This should also prevent one kind of illusion / attack. Example:
-   *   Input-Path:  "/home/user/file-ok.txt                          /../user/secret.txt"
-   *   Output-Path: "/home/user/secret.txt"
-   *   Due to the length of the filenames (which include lot of spaces),
-   *   the user might overlook the actual path (e.g., also because of scroll bars in GUI).
   */
 
   if (input[0] == '\0') return "";
@@ -319,8 +336,6 @@ compose_mail_thunderbird (GAppInfo       *info,
   return success;
 }
 
-
-
 static void
 email_tb_dialog_done (GtkWidget *widget,
                    int response,
@@ -357,7 +372,7 @@ email_tb_dialog_done (GtkWidget *widget,
     {
       g_autoptr(GAppInfo) info = NULL;
       info = g_app_info_get_default_for_uri_scheme ("mailto");
-      if (compose_mail_pre ( info, handle->arg_options, handle->attachments_links_processed))
+      if (compose_mail ((const char * const *)handle->addrs, handle->cc, handle->bcc, handle->subject, handle->body, handle->attachments_links_processed, NULL))
         handle->response = 0;
       else
         handle->response = 2;
@@ -386,13 +401,20 @@ list_the_attachments (const char ** attachments, gboolean get_uri)
   return (const char **) g_strv_builder_end (builder);
 
 }
+
 gboolean
 handle_compose_email_tb (XdpImplEmail *object,
                          GDBusMethodInvocation *invocation,
                          const char *arg_handle,
                          const char *arg_app_id,
                          const char *arg_parent_window,
-                         GVariant *arg_options)
+                         GVariant *arg_options,
+                         const char * const *addrs,
+                         const char * const *cc,
+                         const char * const *bcc,
+                         const char  *subject,
+                         const char  *body,
+                         const char **attachments)
 {
   g_autoptr(Request) request = NULL;
   const char *sender;
@@ -408,15 +430,12 @@ handle_compose_email_tb (XdpImplEmail *object,
   GtkWidget *fake_parent;
 
   const char *no_att[1] = { NULL };
-  const char **attachments = no_att;
   g_autoptr(GAppInfo) info = NULL;
   gboolean is_thunderbird = FALSE;
 
   sender = g_dbus_method_invocation_get_sender (invocation);
 
   request = request_new (sender, arg_app_id, arg_handle);
-
-  g_variant_lookup (arg_options, "attachments", "^a&s", &attachments);
 
   info = g_app_info_get_default_for_uri_scheme ("mailto");
 
@@ -433,7 +452,7 @@ handle_compose_email_tb (XdpImplEmail *object,
 
   if (attachments == no_att || !is_thunderbird)
     {
-      if (!compose_mail_pre (info, arg_options, attachments))
+      if (!compose_mail ((const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
         response = 2;
 
       g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
@@ -468,8 +487,8 @@ handle_compose_email_tb (XdpImplEmail *object,
                                   NULL);
       g_object_ref_sink (fake_parent);
 
-      const char **attachments_list_text =  list_the_attachments (attachments, FALSE); //@TODO Where to free this?
-      const char **attachments_list_link =  list_the_attachments (attachments, TRUE); //@TODO Where to free this?
+      const char **attachments_list_text =  list_the_attachments (attachments, FALSE);
+      const char **attachments_list_link =  list_the_attachments (attachments, TRUE);
       dialog = GTK_WIDGET (email_tb_dialog_new (attachments_list_text , attachments_list_link ));
       gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (fake_parent));
       gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
@@ -483,6 +502,12 @@ handle_compose_email_tb (XdpImplEmail *object,
       handle->arg_options = g_variant_ref (arg_options);
       handle->attachments_links_processed = attachments_list_link;
 
+      handle->addrs = (const char * const *) g_strdupv ((gchar **)addrs);
+      handle->cc = cc;
+      handle->bcc = bcc;
+      handle->subject = subject;
+      handle->body = body;
+
       g_signal_connect (request, "handle-close", G_CALLBACK (handle_close), handle);
 
       g_signal_connect (dialog, "done", G_CALLBACK (email_tb_dialog_done), handle);
@@ -495,6 +520,7 @@ handle_compose_email_tb (XdpImplEmail *object,
       gtk_widget_show (dialog);
 
       request_export (request, g_dbus_method_invocation_get_connection (invocation));
+      g_strfreev ((gchar **)attachments_list_text);
     }
   return TRUE;
 }

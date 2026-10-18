@@ -102,30 +102,81 @@ compose_mail_mailto (GAppInfo       *info,
 }
 
 gboolean
-compose_mail_pre (GAppInfo *info,
-                  GVariant *arg_options,
-                  const char **attachments_links)
+compose_mail (const char * const *addrs,
+              const char * const *cc,
+              const char * const *bcc,
+              const char  *subject,
+              const char  *body,
+              const char **attachments,
+              GError     **error)
 {
-  /*  About variable attachments_links:
-   *    We do not extract this again from arg_options.
-   *    Because it was maybe modified/cleaned-up before.
-   *    (currently only relevant for Thunderbird (EmailTbDialog)).
-   */
-
-  gboolean is_thunderbird = FALSE;
+  g_autoptr(GAppInfo) info = NULL;
   const char *commandline;
+  const char *no_att[1] = { NULL };
+  gboolean is_thunderbird = FALSE;
+
+  info = g_app_info_get_default_for_uri_scheme ("mailto");
+  if (info == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
+      return FALSE;
+    }
+
   commandline = g_app_info_get_commandline (info);
   if (strstr (commandline, "thunderbird") )
     is_thunderbird = TRUE;
 
+  if (is_thunderbird && attachments != no_att)
+    {
+      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
+        return TRUE;
+    }
+  else
+    {
+      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
+        return TRUE;
+    }
+  return FALSE;
+}
+
+static gboolean
+handle_compose_email (XdpImplEmail *object,
+                      GDBusMethodInvocation *invocation,
+                      const char *arg_handle,
+                      const char *arg_app_id,
+                      const char *arg_parent_window,
+                      GVariant *arg_options)
+{
+  g_autoptr(Request) request = NULL;
+  const char *sender;
+  GVariantBuilder opt_builder;
+  guint response = 0;
+  g_autoptr(GError) error = NULL;
   const char *address = NULL;
   const char *subject = NULL;
   const char *body = NULL;
-  const char *no_att[1] = { NULL };
+  const char *no_att[1] = { NULL }; //@TODO: shouldn't be this bedder: no_att[0] = { NULL }
+  const char **attachments = no_att;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
   const char * const *bcc = NULL;
   g_auto(GStrv) addrs = NULL;
+
+  g_autoptr(GAppInfo) info = NULL;
+  gboolean is_thunderbird = FALSE;
+  const char *commandline;
+
+  info = g_app_info_get_default_for_uri_scheme ("mailto");
+  if (info != NULL)
+    {
+      commandline = g_app_info_get_commandline (info);
+      if (strstr (commandline, "thunderbird") )
+        is_thunderbird = TRUE;
+    }
+
+  sender = g_dbus_method_invocation_get_sender (invocation);
+
+  request = request_new (sender, arg_app_id, arg_handle);
 
   g_variant_lookup (arg_options, "address", "&s", &address);
   g_variant_lookup (arg_options, "addresses", "^a&s", &addresses);
@@ -133,6 +184,7 @@ compose_mail_pre (GAppInfo *info,
   g_variant_lookup (arg_options, "bcc", "^a&s", &bcc);
   g_variant_lookup (arg_options, "subject", "&s", &subject);
   g_variant_lookup (arg_options, "body", "&s", &body);
+  g_variant_lookup (arg_options, "attachments", "^a&s", &attachments);
 
   if (address)
     {
@@ -153,62 +205,15 @@ compose_mail_pre (GAppInfo *info,
   else
     addrs = g_strdupv ((char **)addresses);
 
-  if (is_thunderbird && attachments_links != no_att)
-    {
-      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
-        return TRUE;
-    }
-  else
-    {
-      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_links, NULL))
-        return TRUE;
-    }
-  return FALSE;
-}
-
-static gboolean
-handle_compose_email (XdpImplEmail *object,
-                      GDBusMethodInvocation *invocation,
-                      const char *arg_handle,
-                      const char *arg_app_id,
-                      const char *arg_parent_window,
-                      GVariant *arg_options)
-{
-  g_autoptr(Request) request = NULL;
-  const char *sender;
-  GVariantBuilder opt_builder;
-  guint response = 0;
-  g_autoptr(GError) error = NULL;
-
-  const char *no_att[1] = { NULL };
-  const char **attachments = no_att;
-  g_autoptr(GAppInfo) info = NULL;
-  gboolean is_thunderbird = FALSE;
-
-  sender = g_dbus_method_invocation_get_sender (invocation);
-
-  request = request_new (sender, arg_app_id, arg_handle);
-
-  g_variant_lookup (arg_options, "attachments", "^a&s", &attachments);
-
-  info = g_app_info_get_default_for_uri_scheme ("mailto");
-
-  if (info == NULL)
-    {
-      g_warning ("ERROR: No mailto handler");
-      return FALSE;
-    }
-
-  const char *commandline;
   commandline = g_app_info_get_commandline (info);
   if (strstr (commandline, "thunderbird") )
     is_thunderbird = TRUE;
 
   if (attachments != no_att && is_thunderbird )
-    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options);
+    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options, (const char * const *)addrs, cc, bcc, subject, body, attachments);
   else
     {
-      if (!compose_mail_pre (info, arg_options, attachments))
+      if (!compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
         response = 2;
 
       g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);

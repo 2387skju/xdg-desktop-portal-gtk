@@ -13,9 +13,12 @@ struct _EmailTbDialog {
   GtkWindow parent;
 
   GtkWidget *heading;
-  GtkWidget *list_footer;
-  GtkWidget *info_text;
+  GtkWidget *heading2;
+  GtkWidget *info_box;
+  GtkWidget *info_text1;
+  GtkWidget *info_text2;
   GtkWidget *info_button;
+  GtkWidget *info_details_button;
   GtkWidget *yes_button;
   GtkWidget *no_button;
   GtkWidget *list_files;
@@ -73,10 +76,21 @@ static void
 info_button_clicked (GtkWidget *button,
                EmailTbDialog *dialog)
 {
-  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_text)) == 0)
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text), 1);
+  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_box)) == 0)
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), 1);
   else
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text), 0);
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), 0);
+
+}
+
+static void
+info_details_button_clicked (GtkWidget *button,
+               EmailTbDialog *dialog)
+{
+  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_text2)) == 0)
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), 1);
+  else
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), 0);
 
 }
 
@@ -101,13 +115,17 @@ email_tb_dialog_class_init (EmailTbDialogClass *class)
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, no_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, heading);
-  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, list_footer);
-  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, heading2);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_box);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text1);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text2);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_button);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_details_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, list_files);
 
   gtk_widget_class_bind_template_callback (widget_class, button_clicked);
   gtk_widget_class_bind_template_callback (widget_class, info_button_clicked);
+  gtk_widget_class_bind_template_callback (widget_class, info_details_button_clicked);
 }
 
 EmailTbDialog *

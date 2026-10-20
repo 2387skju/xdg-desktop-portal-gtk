@@ -47,7 +47,23 @@
             <property name="width-chars">26</property>
             <property name="valign">start</property>
             <property name="margin">5</property>
+            <property name="margin-bottom">0</property>
             <property name="margin-top">0</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkLabel" id="heading2">
+            <property name="visible">1</property>
+            <property name="wrap">1</property>
+            <property name="xalign">0</property>
+            <property name="max-width-chars">26</property>
+            <property name="width-chars">26</property>
+            <property name="valign">start</property>
+            <property name="margin">5</property>
+            <property name="margin-top">0</property>
+            <property name="selectable">yes</property>
+            <property name="label" translatable="yes">Please note: These files may contain sensitive data (like password, etc.), so please check the listed files. Click to open one of the files.
+</property>
           </object>
         </child>
         <child>
@@ -66,43 +82,58 @@
           </object>
         </child>
         <child>
-          <object class="GtkLabel" id="list_footer">
+          <object class="GtkBox" id="info_box">
             <property name="visible">1</property>
-            <property name="wrap">1</property>
-            <property name="xalign">0</property>
-            <property name="max-width-chars">26</property>
-            <property name="width-chars">26</property>
-            <property name="valign">start</property>
-            <property name="margin">5</property>
-            <property name="margin-top">0</property>
-            <property name="selectable">yes</property>
-            <property name="label" translatable="yes">Please check the filename/path, or click to open a file.</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkLabel" id="info_text">
-            <property name="visible">0</property>
-            <property name="xalign">1</property>
-            <property name="valign">start</property>
-            <property name="halign">start</property>
+            <property name="orientation">vertical</property>
             <property name="margin">5</property>
             <property name="margin-bottom">5</property>
-            <property name="selectable">yes</property>
-            <property name="label" translatable="yes">Info:
-This dialog box appears because an application or website is attempting to compose a new email
-and wants to attach your private files in the message. These files may contain private or sensitive information:
-Some examples: \"your-secret-file.txt\" , \"~/.ssh/id_rsa\" , login-data, passwords or sensible system informationen.
-You should therefore check what is being sent. You can click on the file to open it.
-To be absolutely sure, you should also double-check the file list in Thunderbird.
+            <property name="margin-top">5</property>
+            <child>
+              <object class="GtkLabel" id="info_text1">
+                <property name="visible">1</property>
+                <property name="xalign">1</property>
+                <property name="valign">start</property>
+                <property name="halign">start</property>
+                <property name="margin">0</property>
+                <property name="selectable">yes</property>
+                <property name="label" translatable="yes">Info:
+    This dialog box appears because an application or website is attempting to compose a new email
+    and wants to attach your private files in the message. These files may contain private or sensitive information:
+    Some examples: "your-secret-file.txt" , "~/.ssh/id_rsa" , login-data, passwords or sensible system informationen.
+    You should therefore check what is being sent. You can click on the file to open it.
+    To be absolutely sure, you should also double-check the file list in Thunderbird.</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkToggleButton" id="info_details_button">
+                <property name="visible">1</property>
+                <property name="label" translatable="yes">_More technical details</property>
+                <property name="margin">0</property>
+                <property name="margin-top">5</property>
+                <property name="use-underline">1</property>
+                <property name="tooltip-text" translatable="yes">Show or hide help more technical detail information</property>
+                <signal name="clicked" handler="info_details_button_clicked"/>
+              </object>
+            </child>
 
-More technical details:
-This dialog appears only when using email program Thunderbird.
-The technical reason for this is, that the request is processed via the mailto: protocol.
-It is impossible to determine which application or website is making the request.
-Therefore, it is unclear whether the request is trustworthy.
-Thunderbird was manually integrated to be compatible with this technical implementation
-(it does not normally support file attachments via mailto:). That is why this dialog box was added.
-Other email programs already have their own conspicuous warnings built in.</property>
+            <child>
+              <object class="GtkLabel" id="info_text2">
+                <property name="visible">0</property>
+                <property name="selectable">yes</property>
+                <property name="xalign">1</property>
+                <property name="valign">start</property>
+                <property name="halign">start</property>
+                <property name="label" translatable="yes">More technical details:
+    This dialog appears only when using email program Thunderbird.
+    The technical reason for this is, that the request is processed via the mailto: protocol.
+    It is impossible to determine which application or website is making the request.
+    Therefore, it is unclear whether the request is trustworthy.
+    Thunderbird was manually integrated to be compatible with this technical implementation
+    (it does not normally support file attachments via mailto:). That is why this dialog box was added.
+    Other email programs already have their own conspicuous warnings built in.</property>
+              </object>
+            </child>
+
           </object>
         </child>
         <child>

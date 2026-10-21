@@ -25,13 +25,6 @@
 #include "utils.h"
 #include "externalwindow.h"
 
-//@TODO: Check if a file exists should be improved:
-//       Currently there is a check for file exists:
-//        - It will be shown in the list (but not useable link to click).
-//        - It will be skiped, when starting thunderbird.
-//        - There is no message for the user, that a file is missing.
-//       And also i'm not sure if this is really a good idea (, for security reasons).
-
 typedef struct {
   XdpImplEmail *impl;
   GDBusMethodInvocation *invocation;
@@ -59,7 +52,6 @@ email_tb_dialog_handle_free (gpointer data)
   g_object_unref (handle->request);
   g_object_unref (handle->dialog);
   g_variant_unref (handle->arg_options);
-  // @TODO: free of handle->attachments needed?
   g_strfreev ((gchar **)handle->addrs);
 
   g_free (handle);
@@ -89,7 +81,6 @@ send_response (EmailTbDialogHandle *handle)
 
   email_tb_dialog_handle_close (handle);
 }
-
 
 static gboolean
 handle_close (XdpImplRequest *object,
@@ -166,14 +157,15 @@ clean_up_parent_path_from_file_path (const char* input)
 }
 
 const char *
-get_uri_for_tb_and_check_exists (const char *input)
+get_uri_for_tb (const char *input,
+                gboolean check_exists)
 {
     if (input == NULL || input[0] == '\0')
     {
       g_warning ("attachment: skipped this file (does not exists): %s ", input);
       return "";
     }
-    if (!g_file_test (input, G_FILE_TEST_EXISTS))
+    if (check_exists && !g_file_test (input, G_FILE_TEST_EXISTS))
       {
         g_warning ("attachment: skipped this file (does not exists): %s ", input);
         return "";
@@ -188,7 +180,7 @@ get_uri_for_tb_and_check_exists (const char *input)
     g_string_replace (file_esc, "\'", "%27", 0);
     // escape ' (this is only for a very rare problem: e.g. attach this two filenames, in this exact order: a' and abc)
     g_string_replace (file_esc, ",", "%2C", 0); // escape , (needed to handle multiple files)
-    if (!g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
+    if (check_exists && !g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
       {
         // this check is just a dublicate (to check before), and can be removed
         g_warning ("attachment: skipped this file (does not exists): %s ", file_esc->str);
@@ -276,13 +268,14 @@ compose_mail_thunderbird (GAppInfo       *info,
   if (attachments)
     {
       g_string_append_printf (tb_arg, "attachment='");
+      int files_added = 0;
       for (i = 0; attachments[i]; i++)
         {
-          if (i != 0)
+          if (attachments[i][0] == '\0')
+            continue; // skip empty entrys (e.g. because file not found before)
+          files_added++;
+          if (files_added != 1)
             g_string_append_printf (tb_arg, ",");
-          /*already done before (do not call it twice):
-          const char *uri = get_uri_for_tb_and_check_exists (attachments[i]);
-          g_string_append_printf (tb_arg, "%s", uri);*/
           g_string_append_printf (tb_arg, "%s", attachments[i]);
         }
         g_string_append_printf(tb_arg, "',");
@@ -336,21 +329,21 @@ compose_mail_thunderbird (GAppInfo       *info,
 
 static const char **
 process_attachment_list (const char ** attachments,
-                         gboolean output_uri)
+                         gboolean output_uri,
+                         gboolean check_exists_uri)
 {
   g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
-
   int i = 0;
   for (i = 0; attachments[i]; i++)
     {
       const char *file =  clean_up_parent_path_from_file_path (attachments[i]);
-      if (!output_uri)
-        g_strv_builder_add (builder, file);
-      else
+      if (output_uri)
         {
-          const char *uri = get_uri_for_tb_and_check_exists (file);
+          const char *uri = get_uri_for_tb (file, check_exists_uri);
           g_strv_builder_add (builder, uri);
         }
+      else
+        g_strv_builder_add (builder, file);
     }
   return (const char **) g_strv_builder_end (builder);
 }
@@ -369,16 +362,14 @@ email_tb_dialog_done (GtkWidget *widget,
         g_warning ("Unexpected response: %d", response);
        /* Fall through */
       case GTK_RESPONSE_DELETE_EVENT:
-        handle->response = 1;
-        handle->attachments = no_att;
-        break;
+        /* Fall through */
       case GTK_RESPONSE_CANCEL:
         handle->response = 1;
         handle->attachments = no_att;
         break;
 
       case GTK_RESPONSE_NO:
-        handle->response = 1; // or should this bedder 0
+        handle->response = 1;
         handle->attachments = no_att;
         break;
 
@@ -391,11 +382,13 @@ email_tb_dialog_done (GtkWidget *widget,
     {
       g_autoptr(GAppInfo) info = NULL;
       info = g_app_info_get_default_for_uri_scheme ("mailto");
+      const char ** attachments_processed_and_exists = process_attachment_list (handle->attachments, TRUE, TRUE);
       if (compose_mail ((const char * const *)handle->addrs, handle->cc, handle->bcc, handle->subject, handle->body,
-                        handle->attachments, NULL))
+                        attachments_processed_and_exists, NULL))
         handle->response = 0;
       else
         handle->response = 2;
+      g_strfreev ((gchar **)attachments_processed_and_exists);
     }
   send_response (handle);
 }
@@ -484,8 +477,8 @@ handle_compose_email_tb (XdpImplEmail *object,
                                   NULL);
       g_object_ref_sink (fake_parent);
 
-      const char **attachments_list_text =  process_attachment_list (attachments, FALSE);
-      const char **attachments_list_link =  process_attachment_list (attachments, TRUE);
+      const char **attachments_list_text =  process_attachment_list (attachments, FALSE, FALSE);
+      const char **attachments_list_link =  process_attachment_list (attachments, TRUE, FALSE);
 
       dialog = GTK_WIDGET (email_tb_dialog_new (attachments_list_text, attachments_list_link));
       gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (fake_parent));
@@ -498,7 +491,7 @@ handle_compose_email_tb (XdpImplEmail *object,
       handle->dialog = g_object_ref (dialog);
       handle->external_parent = external_parent;
       handle->arg_options = g_variant_ref (arg_options);
-      handle->attachments = attachments_list_link;
+      handle->attachments = attachments;
       handle->addrs = (const char * const *) g_strdupv ((gchar **)addrs);
       handle->cc = cc;
       handle->bcc = bcc;
@@ -506,7 +499,6 @@ handle_compose_email_tb (XdpImplEmail *object,
       handle->body = body;
 
       g_signal_connect (request, "handle-close", G_CALLBACK (handle_close), handle);
-
       g_signal_connect (dialog, "done", G_CALLBACK (email_tb_dialog_done), handle);
 
       gtk_widget_realize (dialog);
@@ -518,8 +510,7 @@ handle_compose_email_tb (XdpImplEmail *object,
 
       request_export (request, g_dbus_method_invocation_get_connection (invocation));
       g_strfreev ((gchar **)attachments_list_text);
+      g_strfreev ((gchar **)attachments_list_link);
     }
   return TRUE;
 }
-
-

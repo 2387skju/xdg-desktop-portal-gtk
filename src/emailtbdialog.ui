@@ -14,8 +14,8 @@
             <property name="visible">1</property>
             <property name="label" translatable="yes">_Not attach files</property>
             <property name="use-underline">1</property>
-            <signal name="clicked" handler="button_clicked"/>
             <property name="tooltip-text" translatable="yes">Continue to compose an E-Mail, but without the file attachments.</property>
+            <signal name="clicked" handler="main_buttons_clicked"/>
             <style>
               <class name="suggested-action"/>
             </style>
@@ -26,7 +26,7 @@
             <property name="visible">1</property>
             <property name="label" translatable="yes">_Yes, send %d private files</property>
             <property name="use-underline">1</property>
-            <signal name="clicked" handler="button_clicked"/>
+            <signal name="clicked" handler="main_buttons_clicked"/>
           </object>
           <packing>
             <property name="pack-type">end</property>
@@ -39,12 +39,39 @@
         <property name="visible">1</property>
         <property name="orientation">vertical</property>
         <child>
+          <object class="GtkBox" id="yes_again_outer_box">
+            <property name="visible">0</property>
+            <property name="orientation">horizontal</property>
+            <property name="margin-top">20</property>
+            <property name="margin-bottom">20</property>
+            <child>
+              <object class="GtkButton" id="yes_again_button">
+                <property name="visible">1</property>
+                <property name="label" translatable="yes">Yes _again, send private files.</property>
+                <property name="use-underline">1</property>
+                <signal name="clicked" handler="main_buttons_clicked"/>
+              </object>
+              <packing>
+                <property name="pack-type">end</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">1</property>
+                <property name="label" translatable="yes">&lt;b&gt;Some files was not found&lt;/b&gt;: See the crossed-out entries.</property>
+                <property name="use-markup">1</property>
+              </object>
+              <packing>
+                <property name="pack-type">end</property>
+              </packing>
+            </child>
+          </object>
+        </child>
+        <child>
           <object class="GtkLabel" id="heading">
             <property name="visible">1</property>
             <property name="wrap">1</property>
             <property name="xalign">0</property>
-            <property name="max-width-chars">26</property>
-            <property name="width-chars">26</property>
             <property name="valign">start</property>
             <property name="margin">5</property>
             <property name="margin-bottom">0</property>
@@ -56,21 +83,19 @@
             <property name="visible">1</property>
             <property name="wrap">1</property>
             <property name="xalign">0</property>
-            <property name="max-width-chars">26</property>
-            <property name="width-chars">26</property>
             <property name="valign">start</property>
             <property name="margin">5</property>
             <property name="margin-top">0</property>
-            <property name="selectable">yes</property>
-            <property name="label" translatable="yes">Please note: These files may contain sensitive data (like password, etc.), so please check the listed files. Click to open one of the files.
+            <property name="label" translatable="yes">Please note: These files may contain sensitive data (like password, etc.), so please check the listed files.
+Click to open one of the files. You might double check this list in Thunderbird.
 </property>
           </object>
         </child>
         <child>
           <object class="GtkScrolledWindow">
             <property name="visible">1</property>
-            <property name="hexpand">TRUE</property>
-            <property name="vexpand">TRUE</property>
+            <property name="hexpand">1</property>
+            <property name="vexpand">1</property>
             <property name="min-content-height">200</property>
             <property name="min-content-width">600</property>
             <child>
@@ -83,7 +108,7 @@
         </child>
         <child>
           <object class="GtkBox" id="info_box">
-            <property name="visible">1</property>
+            <property name="visible">0</property>
             <property name="orientation">vertical</property>
             <property name="margin">5</property>
             <property name="margin-bottom">5</property>
@@ -95,7 +120,6 @@
                 <property name="valign">start</property>
                 <property name="halign">start</property>
                 <property name="margin">0</property>
-                <property name="selectable">yes</property>
                 <property name="label" translatable="yes">Info:
     This dialog box appears because an application or website is attempting to compose a new email
     and wants to attach your private files in the message. These files may contain private or sensitive information:
@@ -119,7 +143,6 @@
             <child>
               <object class="GtkLabel" id="info_text2">
                 <property name="visible">0</property>
-                <property name="selectable">yes</property>
                 <property name="xalign">1</property>
                 <property name="valign">start</property>
                 <property name="halign">start</property>
@@ -157,7 +180,7 @@
                 <property name="label" translatable="yes">_Cancel</property>
                 <property name="use-underline">1</property>
                 <property name="margin">0</property>
-                <signal name="clicked" handler="button_clicked"/>
+                <signal name="clicked" handler="main_buttons_clicked"/>
               </object>
               <packing>
                 <property name="pack-type">end</property>

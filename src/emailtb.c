@@ -25,6 +25,15 @@
 #include "utils.h"
 #include "externalwindow.h"
 
+//@TODO: Check if a file exists should be improved:
+//       Currently there is a check for file exists:
+//        - It will be shown in the list (strikethrough, and not useable link to click).
+//        - It will be skiped, when starting thunderbird.
+//        - The file exists check will done before showing the file-list:
+//          I'm not sure if this is really a good idea (, for security reasons).
+//          I prefer now to just check file exists after clicking "send files",
+//          or before click on a file item.
+
 typedef struct {
   XdpImplEmail *impl;
   GDBusMethodInvocation *invocation;
@@ -36,7 +45,6 @@ typedef struct {
   int response;
   GVariant *arg_options; // this is the origin of variabel cc, bcc,...
   const char **attachments;
-  const char **attachments_links_processed;
   const char * const *addrs;
   const char * const *cc;
   const char * const *bcc;
@@ -53,12 +61,6 @@ email_tb_dialog_handle_free (gpointer data)
   g_object_unref (handle->request);
   g_object_unref (handle->dialog);
   g_variant_unref (handle->arg_options);
-  /* @TODO: why we can free handle->attachments_links_processed ?
-   * The other returned value from list_the_attachments() (=attachments_list_text), was possible to free,
-   * but this not. Why?
-   *   not possible to be freed (SIGSEGV, Segmentation fault):
-   *   g_strfreev ((gchar **)handle->attachments_links_processed);
-   */
   g_strfreev ((gchar **)handle->addrs);
 
   g_free (handle);
@@ -329,7 +331,7 @@ compose_mail_thunderbird (GAppInfo       *info,
 
 
 static const char **
-list_the_attachments (const char ** attachments, gboolean get_uri, gboolean check_exists_uri)
+process_attachment_list (const char ** attachments, gboolean get_uri, gboolean check_exists_uri)
 {
   g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
 
@@ -365,18 +367,15 @@ email_tb_dialog_done (GtkWidget *widget,
        /* Fall through */
       case GTK_RESPONSE_DELETE_EVENT:
         handle->response = 1;
-        handle->attachments_links_processed = no_att;
         handle->attachments = no_att;
         break;
       case GTK_RESPONSE_CANCEL:
         handle->response = 1;
-        handle->attachments_links_processed = no_att;
         handle->attachments = no_att;
         break;
 
       case GTK_RESPONSE_NO:
         handle->response = 1; // or should this bedder 0
-        handle->attachments_links_processed = no_att;
         handle->attachments = no_att;
         break;
 
@@ -389,7 +388,7 @@ email_tb_dialog_done (GtkWidget *widget,
     {
       g_autoptr(GAppInfo) info = NULL;
       info = g_app_info_get_default_for_uri_scheme ("mailto");
-      const char ** attachments_processed_and_exists = list_the_attachments (handle->attachments, TRUE, TRUE);
+      const char ** attachments_processed_and_exists = process_attachment_list (handle->attachments, TRUE, TRUE);
       if (compose_mail ((const char * const *)handle->addrs, handle->cc, handle->bcc, handle->subject, handle->body, attachments_processed_and_exists, NULL))
         handle->response = 0;
       else
@@ -483,9 +482,10 @@ handle_compose_email_tb (XdpImplEmail *object,
                                   NULL);
       g_object_ref_sink (fake_parent);
 
-      const char **attachments_list_text =  list_the_attachments (attachments, FALSE, FALSE);
-      const char **attachments_list_link =  list_the_attachments (attachments, TRUE, FALSE); //@TODO Where to free this?
-      dialog = GTK_WIDGET (email_tb_dialog_new (attachments_list_text , attachments_list_link ));
+      const char **attachments_list_text =  process_attachment_list (attachments, FALSE, FALSE);
+      const char **attachments_list_link =  process_attachment_list (attachments, TRUE, TRUE);
+
+      dialog = GTK_WIDGET (email_tb_dialog_new (attachments_list_text, attachments_list_link));
       gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (fake_parent));
       gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
 
@@ -497,7 +497,6 @@ handle_compose_email_tb (XdpImplEmail *object,
       handle->external_parent = external_parent;
       handle->arg_options = g_variant_ref (arg_options);
       handle->attachments = attachments;
-      handle->attachments_links_processed = attachments_list_link;
       handle->addrs = (const char * const *) g_strdupv ((gchar **)addrs);
       handle->cc = cc;
       handle->bcc = bcc;
@@ -516,8 +515,8 @@ handle_compose_email_tb (XdpImplEmail *object,
 
       request_export (request, g_dbus_method_invocation_get_connection (invocation));
       g_strfreev ((gchar **)attachments_list_text);
+      g_strfreev ((gchar **)attachments_list_link);
     }
   return TRUE;
 }
-
 

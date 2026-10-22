@@ -25,15 +25,6 @@
 #include "utils.h"
 #include "externalwindow.h"
 
-//@TODO: Check if a file exists should be improved:
-//       Currently there is a check for file exists:
-//        - It will be shown in the list (strikethrough, and not useable link to click).
-//        - It will be skiped, when starting thunderbird.
-//        - The file exists check will done before showing the file-list:
-//          I'm not sure if this is really a good idea (, for security reasons).
-//          I prefer now to just check file exists after clicking "send files",
-//          or before click on a file item.
-
 typedef struct {
   XdpImplEmail *impl;
   GDBusMethodInvocation *invocation;
@@ -121,7 +112,7 @@ clean_up_parent_path_from_file_path (const char* input)
   if (input[0] == '\0') return "";
   if (input[0] != '/' )
     {
-      g_warning ("Error in %s with %s (must start with /)", __func__, input);
+      g_warning ("attachment: Error in %s with %s (must start with /)", __func__, input);
       return "";
     }
 
@@ -148,7 +139,7 @@ clean_up_parent_path_from_file_path (const char* input)
             }
           if (!remove_done)
             {
-              g_warning ("Error in %s with %s (seems invalid)", __func__, input);
+              g_warning ("attachment: Error in %s with %s (seems invalid)", __func__, input);
               return "";
             }
         }
@@ -168,13 +159,18 @@ clean_up_parent_path_from_file_path (const char* input)
 const char *
 get_uri_for_tb (const char *input, gboolean check_exists)
 {
+    if (input == NULL || input[0] == '\0')
+    {
+      g_warning ("attachment: skipped this file (does not exists): %s ", input);
+      return "";
+    }
     if (check_exists && !g_file_test (input, G_FILE_TEST_EXISTS))
       {
         g_warning ("attachment: skipped this file (does not exists): %s ", input);
         return "";
       }
     gchar *file_uri = g_filename_to_uri (input, NULL, NULL);
-    if(file_uri==NULL)
+    if (file_uri == NULL)
       {
         g_warning ("failed to convert to URI: %s", input);
         return "";
@@ -185,7 +181,7 @@ get_uri_for_tb (const char *input, gboolean check_exists)
     if (check_exists && !g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
       {
         // this check is just a dublicate (to check before), and can be removed
-        g_warning ("Skipped this file (does not exists): %s ", file_esc->str);
+        g_warning ("attachment: skipped this file (does not exists): %s ", file_esc->str);
         g_string_free (file_esc, TRUE);
         return "";
       }
@@ -274,7 +270,7 @@ compose_mail_thunderbird (GAppInfo       *info,
       for (i = 0; attachments[i]; i++)
         {
           if (attachments[i][0]=='\0')
-            continue; // skip empty entrys (e.g. because file not found)
+            continue; // skip empty entrys (e.g. because file not found before)
           files_counter++;
           if (files_counter != 1)
             g_string_append_printf (tb_arg, ",");
@@ -329,27 +325,24 @@ compose_mail_thunderbird (GAppInfo       *info,
   return success;
 }
 
-
 static const char **
 process_attachment_list (const char ** attachments, gboolean get_uri, gboolean check_exists_uri)
 {
   g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
-
   int i = 0;
   for (i = 0; attachments[i]; i++)
     {
-      char *file =  clean_up_parent_path_from_file_path (attachments[i]);
-      if (!get_uri)
-        g_strv_builder_add (builder, file);
-      else
+      const char *file =  clean_up_parent_path_from_file_path (attachments[i]);
+      if (get_uri)
         {
           const char *uri = get_uri_for_tb (file, check_exists_uri);
           g_strv_builder_add (builder, uri);
         }
+      else
+        g_strv_builder_add (builder, file);
       g_free (file);
     }
   return (const char **) g_strv_builder_end (builder);
-
 }
 
 static void
@@ -393,6 +386,7 @@ email_tb_dialog_done (GtkWidget *widget,
         handle->response = 0;
       else
         handle->response = 2;
+      g_strfreev ((gchar **)attachments_processed_and_exists);
     }
   send_response (handle);
 }
@@ -483,7 +477,7 @@ handle_compose_email_tb (XdpImplEmail *object,
       g_object_ref_sink (fake_parent);
 
       const char **attachments_list_text =  process_attachment_list (attachments, FALSE, FALSE);
-      const char **attachments_list_link =  process_attachment_list (attachments, TRUE, TRUE);
+      const char **attachments_list_link =  process_attachment_list (attachments, TRUE, FALSE);
 
       dialog = GTK_WIDGET (email_tb_dialog_new (attachments_list_text, attachments_list_link));
       gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (fake_parent));
@@ -519,4 +513,3 @@ handle_compose_email_tb (XdpImplEmail *object,
     }
   return TRUE;
 }
-

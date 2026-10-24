@@ -155,7 +155,7 @@ handle_compose_email (XdpImplEmail *object,
   const char *address = NULL;
   const char *subject = NULL;
   const char *body = NULL;
-  const char *no_att[1] = { NULL }; //@TODO: shouldn't be this bedder: no_att[0] = { NULL }
+  const char *no_att[1] = { NULL };
   const char **attachments = no_att;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
@@ -210,7 +210,8 @@ handle_compose_email (XdpImplEmail *object,
     is_thunderbird = TRUE;
 
   if (attachments != no_att && is_thunderbird )
-    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options, (const char * const *)addrs, cc, bcc, subject, body, attachments);
+    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options,
+                                    (const char * const *)addrs, cc, bcc, subject, body, attachments);
   else
     {
       if (!compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))

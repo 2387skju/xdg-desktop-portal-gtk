@@ -13,15 +13,13 @@ struct _EmailTbDialog {
   GtkWindow parent;
 
   GtkWidget *heading;
-  GtkWidget *heading2;
   GtkWidget *info_box;
-  GtkWidget *info_text1;
   GtkWidget *info_text2;
   GtkWidget *info_button;
   GtkWidget *info_details_button;
   GtkWidget *yes_button;
   GtkWidget *yes_again_button;
-  GtkWidget *yes_again_outer_box;
+  GtkWidget *yes_again_box;
   GtkWidget *no_button;
   GtkWidget *list_files;
 
@@ -52,13 +50,9 @@ email_tb_dialog_finalize (GObject *object)
 {
   EmailTbDialog *dialog = EMAILTB_DIALOG (object);
 
-  G_OBJECT_CLASS (email_tb_dialog_parent_class)->finalize (object);
-}
-
-static void
-email_tb_dialog_delete_event_clbk (GtkWidget *widget, EmailTbDialog *dialog )
-{
   g_slist_free (dialog->list_items);
+
+  G_OBJECT_CLASS (email_tb_dialog_parent_class)->finalize (object);
 }
 
 static void style_file_not_found_for_linkbutton (GtkWidget *widget)
@@ -72,21 +66,20 @@ static void style_file_not_found_for_linkbutton (GtkWidget *widget)
   PangoAttrList *attrlist = pango_attr_list_new ();
   PangoAttribute *attr = pango_attr_strikethrough_new (TRUE);
   pango_attr_list_insert (attrlist, attr);
-  gtk_label_set_attributes (GTK_LABEL(child), attrlist);
+  gtk_label_set_attributes (GTK_LABEL (child), attrlist);
   pango_attr_list_unref (attrlist);
 }
 
 static gboolean check_file_item_non_exist_and_style (GtkWidget *widget)
 {
-  g_return_val_if_fail ( GTK_IS_LINK_BUTTON ( widget ), FALSE );
+  g_return_val_if_fail ( GTK_IS_LINK_BUTTON (widget), FALSE );
   const char *uri = gtk_link_button_get_uri (GTK_LINK_BUTTON (widget));
   if (uri != NULL && uri[0] != '\0')
     {
       const char *filename = g_filename_from_uri (uri, NULL, NULL);
-      if ( filename!=NULL && g_file_test (filename, G_FILE_TEST_EXISTS))
+      if ( filename != NULL && g_file_test (filename, G_FILE_TEST_EXISTS))
         return FALSE;
     }
-  //g_warning ("File does not exists: %s ", uri);
   style_file_not_found_for_linkbutton (widget);
   return TRUE;
 }
@@ -117,7 +110,7 @@ main_buttons_clicked (GtkWidget *button,
           g_string_free (yes_again_button_text, TRUE);
           if (files_exists == 0)
             gtk_widget_set_visible (GTK_WIDGET (dialog->yes_again_button), FALSE);
-          gtk_widget_set_visible (GTK_WIDGET (dialog->yes_again_outer_box), TRUE);
+          gtk_widget_set_visible (GTK_WIDGET (dialog->yes_again_box), TRUE);
           gtk_widget_set_visible (GTK_WIDGET (dialog->yes_button), FALSE);
           return;
         }
@@ -138,22 +131,20 @@ static void
 info_button_clicked (GtkWidget *button,
                      EmailTbDialog *dialog)
 {
-  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_box)) == 0)
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), 1);
+  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_box)) == TRUE)
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), FALSE);
   else
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), 0);
-
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_box), TRUE);
 }
 
 static void
 info_details_button_clicked (GtkWidget *button,
                              EmailTbDialog *dialog)
 {
-  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_text2)) == 0)
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), 1);
+  if (gtk_widget_get_visible (GTK_WIDGET (dialog->info_text2)) == TRUE)
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), FALSE);
   else
-    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), 0);
-
+    gtk_widget_set_visible (GTK_WIDGET (dialog->info_text2), TRUE);
 }
 
 static void
@@ -176,12 +167,10 @@ email_tb_dialog_class_init (EmailTbDialogClass *class)
   gtk_widget_class_set_template_from_resource (widget_class, "/org/freedesktop/portal/desktop/gtk/emailtbdialog.ui");
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_again_button);
-  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_again_outer_box);
+  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, yes_again_box);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, no_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, heading);
-  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, heading2);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_box);
-  gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text1);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_text2);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_button);
   gtk_widget_class_bind_template_child (widget_class, EmailTbDialog, info_details_button);
@@ -192,7 +181,7 @@ email_tb_dialog_class_init (EmailTbDialogClass *class)
   gtk_widget_class_bind_template_callback (widget_class, info_details_button_clicked);
 }
 
-static gboolean file_item_linkbutton_press_event_clbk ( GtkWidget *widget, GdkEvent *event )
+static gboolean file_item_linkbutton_press_event_clbk (GtkWidget *widget, GdkEvent *event)
 {
   return check_file_item_non_exist_and_style (widget);
 }
@@ -233,7 +222,6 @@ email_tb_dialog_new (const char **attachments_list_text,
       gtk_box_pack_start (GTK_BOX (dialog->list_files), file_item, TRUE,TRUE,2);
       dialog->list_items = g_slist_append (dialog->list_items, file_item);
     }
-  g_signal_connect (dialog->list_files, "delete-event", G_CALLBACK (email_tb_dialog_delete_event_clbk), dialog);
 
   int files_counter = i;
   g_string_printf (heading, _("Share these %d of your private files / data by E-Mail?"), files_counter);
@@ -242,7 +230,7 @@ email_tb_dialog_new (const char **attachments_list_text,
   g_string_printf (yes_button_text, _("_Yes, send %d private files"), files_counter);
   gtk_button_set_label (GTK_BUTTON (dialog->yes_button), yes_button_text->str);
 
-  gtk_widget_show_all(GTK_WIDGET(dialog->list_files));
+  gtk_widget_show_all (GTK_WIDGET (dialog->list_files));
 
   g_string_free (heading, TRUE);
   g_string_free (yes_button_text, TRUE);

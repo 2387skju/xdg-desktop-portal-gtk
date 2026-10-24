@@ -94,7 +94,6 @@ compose_mail_mailto (GAppInfo       *info,
   uris = g_list_append (uris, url->str);
 
   g_debug ("Launching: %s\n", url->str);
-  g_warning ("Launching: %s\n", url->str);
 
   success = g_app_info_launch_uris (info, uris, NULL, error);
 
@@ -229,18 +228,11 @@ handle_compose_email (XdpImplEmail *object,
   return TRUE;
 }
 
-
-static GDBusConnection *system_bus;
-
 gboolean
 email_init (GDBusConnection *bus,
             GError **error)
 {
   GDBusInterfaceSkeleton *helper;
-
-  system_bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, error);
-  if (system_bus == NULL)
-    return FALSE;
 
   helper = G_DBUS_INTERFACE_SKELETON (xdp_impl_email_skeleton_new ());
 

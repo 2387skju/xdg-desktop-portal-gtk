@@ -34,7 +34,7 @@ typedef struct {
   ExternalWindow *external_parent;
 
   int response;
-  GVariant *arg_options; // origin of variabel cc, bcc,...
+  GVariant *arg_options; // origin of variable cc, bcc,...
   const char **attachments;
   const char * const *addrs;
   const char * const *cc;
@@ -329,7 +329,7 @@ compose_mail_thunderbird (GAppInfo       *info,
 
 static const char **
 process_attachment_list (const char ** attachments,
-                         gboolean get_uri,
+                         gboolean output_uri,
                          gboolean check_exists_uri)
 {
   g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
@@ -337,14 +337,13 @@ process_attachment_list (const char ** attachments,
   for (i = 0; attachments[i]; i++)
     {
       const char *file =  clean_up_parent_path_from_file_path (attachments[i]);
-      if (get_uri)
+      if (output_uri)
         {
           const char *uri = get_uri_for_tb (file, check_exists_uri);
           g_strv_builder_add (builder, uri);
         }
       else
         g_strv_builder_add (builder, file);
-      g_free (file);
     }
   return (const char **) g_strv_builder_end (builder);
 }

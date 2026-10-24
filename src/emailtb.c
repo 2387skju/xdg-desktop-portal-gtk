@@ -177,7 +177,8 @@ get_uri_for_tb (const char *input,
         return "";
       }
     GString *file_esc = g_string_new ((char *) file_uri);
-    g_string_replace (file_esc, "\'", "%27", 0); // escape ' (this is only for a very rare problem: e.g. attach this two filenames, in this exact order: a' and abc )
+    g_string_replace (file_esc, "\'", "%27", 0);
+    // escape ' (this is only for a very rare problem: e.g. attach this two filenames, in this exact order: a' and abc)
     g_string_replace (file_esc, ",", "%2C", 0); // escape , (needed to handle multiple files)
     if (check_exists && !g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
       {
@@ -383,7 +384,8 @@ email_tb_dialog_done (GtkWidget *widget,
       g_autoptr(GAppInfo) info = NULL;
       info = g_app_info_get_default_for_uri_scheme ("mailto");
       const char ** attachments_processed_and_exists = process_attachment_list (handle->attachments, TRUE, TRUE);
-      if (compose_mail ((const char * const *)handle->addrs, handle->cc, handle->bcc, handle->subject, handle->body, attachments_processed_and_exists, NULL))
+      if (compose_mail ((const char * const *)handle->addrs, handle->cc, handle->bcc, handle->subject, handle->body,
+                        attachments_processed_and_exists, NULL))
         handle->response = 0;
       else
         handle->response = 2;

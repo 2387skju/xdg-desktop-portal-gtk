@@ -223,7 +223,7 @@ email_tb_dialog_new (const char **attachments_list_text,
        *  - before open a single file item (click on it)
        *  - on click button "send files"
        *  I can imagine this approach is a little safer, than making an unfounded file-system request.
-       *  (A reminder: we don't know the origin/source of this request. E.g. somehow internet-page with mailto:-link.) */
+       *  (Reminder: we don't know the origin/source of this request. E.g. somehow internet-page with mailto:-link.) */
 
       gtk_widget_set_valign (file_item, GTK_ALIGN_START);
       gtk_widget_set_halign (file_item, GTK_ALIGN_START);

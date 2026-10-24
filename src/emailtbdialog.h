@@ -6,6 +6,6 @@
 typedef struct _EmailTbDialog EmailTbDialog;
 typedef struct _EmailTbDialogClass EmailTbDialogClass;
 
-EmailTbDialog * email_tb_dialog_new (const char **attachments_text,
-                                     const char **attachments_link);
+EmailTbDialog * email_tb_dialog_new (const char **attachments_list_text,
+                                     const char **attachments_list_link);
 

@@ -34,13 +34,13 @@ typedef struct {
   ExternalWindow *external_parent;
 
   int response;
-  GVariant *arg_options; // this is the origin of variabel cc, bcc,...
+  GVariant *arg_options; // origin of variabel cc, bcc,...
   const char **attachments;
   const char * const *addrs;
   const char * const *cc;
   const char * const *bcc;
-  const char  *subject;
-  const char  *body;
+  const char *subject;
+  const char *body;
 } EmailTbDialogHandle;
 
 static void
@@ -119,7 +119,7 @@ clean_up_parent_path_from_file_path (const char* input)
   GString *out = g_string_new ("");
   char ** splited = g_strsplit (input, "/", -1);
   int i = 0;
-  for (i = 0;splited[i];i++)
+  for (i = 0; splited[i]; i++)
     {
       // search for path ..
       if (splited[i][0] == '.' && splited[i][1] == '.' && splited[i][2] == '\0')
@@ -128,7 +128,7 @@ clean_up_parent_path_from_file_path (const char* input)
           int j = 0;
           gboolean remove_done = FALSE;
           // search & remove the path part before
-          for (j = i; j>0; j--)
+          for (j = i; j > 0; j--)
             {
               if (splited[j][0] != '\0')
                 {
@@ -145,9 +145,9 @@ clean_up_parent_path_from_file_path (const char* input)
         }
     }
   // pack new string
-  for (i = 0;splited[i];i++)
+  for (i = 0; splited[i]; i++)
     {
-      if (splited[i][0]!='\0')
+      if (splited[i][0] != '\0')
         {
           g_string_append (out, "/");
           g_string_append (out, splited[i]);
@@ -157,7 +157,8 @@ clean_up_parent_path_from_file_path (const char* input)
 }
 
 const char *
-get_uri_for_tb (const char *input, gboolean check_exists)
+get_uri_for_tb (const char *input,
+                gboolean check_exists)
 {
     if (input == NULL || input[0] == '\0')
     {
@@ -192,9 +193,9 @@ const char *
 escape_maybe_single_quote_comma (const char* input)
 {
   /* This is just for future use:
-   * In Thunderbird the string ', in E-Mail-adress is a problematic combination.
-   * Looks like actually character , in E-Mail-adress is not allowed, in xdg-desktop.
-   * So, this is not a real problem, at the moment.
+   *  In Thunderbird the string ', in E-Mail-adress is a problematic combination.
+   *  Seems, that actually character , in E-Mail-adress is not allowed (in xdg-desktop).
+   *  So, this is not a real problem, at the moment.
    */
   if (strchr (input, ',') != NULL && strchr (input, '\'') != NULL)
     {
@@ -259,20 +260,20 @@ compose_mail_thunderbird (GAppInfo       *info,
       }
   enc2_body = g_uri_escape_string (enc1_body->str ? enc1_body->str : "", NULL, FALSE);
 
-  // First start with attachment:
-  //   This maybe catches some malicous input data. Example:
-  //     Previous use of attachment= inside of an Email-Adresse.
-  //     That shouldn't work, but just in case it would...
+  /* First start with attachment:
+   *   This may prevent malicous input data. Example:
+   *     Previous used of attachment= within an Email-Adresse.
+   *     That shouldn't work, but just in case. */
   if (attachments)
     {
       g_string_append_printf (tb_arg, "attachment='");
-      int files_counter = 0;
+      int files_added = 0;
       for (i = 0; attachments[i]; i++)
         {
-          if (attachments[i][0]=='\0')
+          if (attachments[i][0] == '\0')
             continue; // skip empty entrys (e.g. because file not found before)
-          files_counter++;
-          if (files_counter != 1)
+          files_added++;
+          if (files_added != 1)
             g_string_append_printf (tb_arg, ",");
           g_string_append_printf (tb_arg, "%s", attachments[i]);
         }
@@ -326,7 +327,9 @@ compose_mail_thunderbird (GAppInfo       *info,
 }
 
 static const char **
-process_attachment_list (const char ** attachments, gboolean get_uri, gboolean check_exists_uri)
+process_attachment_list (const char ** attachments,
+                         gboolean get_uri,
+                         gboolean check_exists_uri)
 {
   g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
   int i = 0;
@@ -347,8 +350,8 @@ process_attachment_list (const char ** attachments, gboolean get_uri, gboolean c
 
 static void
 email_tb_dialog_done (GtkWidget *widget,
-                   int response,
-                   gpointer user_data)
+                      int response,
+                      gpointer user_data)
 {
   EmailTbDialogHandle *handle = user_data;
   const char *no_att[1] = { NULL };
@@ -359,16 +362,14 @@ email_tb_dialog_done (GtkWidget *widget,
         g_warning ("Unexpected response: %d", response);
        /* Fall through */
       case GTK_RESPONSE_DELETE_EVENT:
-        handle->response = 1;
-        handle->attachments = no_att;
-        break;
+        /* Fall through */
       case GTK_RESPONSE_CANCEL:
         handle->response = 1;
         handle->attachments = no_att;
         break;
 
       case GTK_RESPONSE_NO:
-        handle->response = 1; // or should this bedder 0
+        handle->response = 1;
         handle->attachments = no_att;
         break;
 
@@ -454,8 +455,7 @@ handle_compose_email_tb (XdpImplEmail *object,
     }
   else
     {
-      g_debug ("show attachment confirm Dialog");
-      // This dialog is only for Thunderbird needed
+      g_debug ("Show attachment confirm Dialog (only for Thunderbird needed)");
       if (arg_parent_window)
         {
           external_parent = create_external_window_from_handle (arg_parent_window);

@@ -14,8 +14,8 @@
             <property name="visible">1</property>
             <property name="label" translatable="yes">_Not attach files</property>
             <property name="use-underline">1</property>
-            <property name="tooltip-text" translatable="yes">Continue to compose an E-Mail, but without the file attachments.</property>
             <signal name="clicked" handler="main_buttons_clicked"/>
+            <property name="tooltip-text" translatable="yes">Continue to compose an E-Mail, but without the file attachments.</property>
             <style>
               <class name="suggested-action"/>
             </style>
@@ -87,8 +87,7 @@
             <property name="margin">5</property>
             <property name="margin-top">0</property>
             <property name="label" translatable="yes">Please note: These files may contain sensitive data (like password, etc.), so please check the listed files.
-Click to open one of the files. You might double check this list in Thunderbird.
-</property>
+Click to open one of the files. You might double check this list in Thunderbird.</property>
           </object>
         </child>
         <child>

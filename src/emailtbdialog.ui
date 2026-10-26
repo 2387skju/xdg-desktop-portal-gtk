@@ -58,7 +58,7 @@
             <child>
               <object class="GtkLabel">
                 <property name="visible">1</property>
-                <property name="label" translatable="yes">&lt;b&gt;Some files was not found&lt;/b&gt;: See the crossed-out entries.</property>
+                <property name="label" translatable="yes">&lt;b&gt;Some files could not be found&lt;/b&gt;: See the crossed-out entries.</property>
                 <property name="use-markup">1</property>
               </object>
               <packing>
@@ -87,7 +87,7 @@
             <property name="margin">5</property>
             <property name="margin-top">0</property>
             <property name="label" translatable="yes">Please note: These files may contain sensitive data (like password, etc.), so please check the listed files.
-Click to open one of the files. You might double check this list in Thunderbird.</property>
+Click to open one of these files. You might double check this list in Thunderbird.</property>
           </object>
         </child>
         <child>

@@ -19,8 +19,6 @@
 #include "shell-dbus.h"
 
 #include "email.h"
-#include "emailtb.h"
-#include "emailtbdialog.h"
 #include "request.h"
 #include "utils.h"
 
@@ -100,6 +98,189 @@ compose_mail_mailto (GAppInfo       *info,
   return success;
 }
 
+const char *
+get_uri_for_tb (const char *input)
+{
+    if (input == NULL || input[0] == '\0')
+    {
+      g_warning ("attachment: skipped this file (does not exists): %s ", input);
+      return "";
+    }
+    if (!g_file_test (input, G_FILE_TEST_EXISTS))
+      {
+        g_warning ("attachment: skipped this file (does not exists): %s ", input);
+        return "";
+      }
+    gchar *file_uri = g_filename_to_uri (input, NULL, NULL);
+    if (file_uri == NULL)
+      {
+        g_warning ("failed to convert to URI: %s", input);
+        return "";
+      }
+    GString *file_esc = g_string_new ((char *) file_uri);
+    g_string_replace (file_esc, "\'", "%27", 0);
+    // escape ' (this is only for a very rare problem: e.g. attach this two filenames, in this exact order: a' and abc)
+    g_string_replace (file_esc, ",", "%2C", 0); // escape , (needed to handle multiple files)
+    if (!g_file_test (g_filename_from_uri (file_esc->str, NULL, NULL), G_FILE_TEST_EXISTS))
+      {
+        // this check is just a dublicate (to check before), and can be removed
+        g_warning ("attachment: skipped this file (does not exists): %s ", file_esc->str);
+        g_string_free (file_esc, TRUE);
+        return "";
+      }
+    return g_string_free (file_esc, FALSE);
+}
+
+const char *
+escape_maybe_single_quote_comma (const char* input)
+{
+  /* This is just for future use:
+   *  In Thunderbird the string ', in E-Mail-adress is a problematic combination.
+   *  Seems, that actually character , in E-Mail-adress is not allowed (in xdg-desktop).
+   *  So, this is not a real problem, at the moment.
+   */
+  if (strchr (input, ',') != NULL && strchr (input, '\'') != NULL)
+    {
+      GString *s = g_string_new (input);
+      g_string_replace (s, "\'", "\\'", 0);
+      g_string_replace (s, ",", "\\,", 0);
+      return g_string_free (s, FALSE);
+    }
+  else
+    return input;
+}
+
+gboolean
+compose_mail_thunderbird (GAppInfo       *info,
+                          const char * const *addrs,
+                          const char * const *cc,
+                          const char * const *bcc,
+                          const char     *subject,
+                          const char     *body,
+                          const char    **attachments,
+                          GError        **error)
+{
+  g_autofree char *enc_subject = NULL;
+  g_autofree GString *enc1_body = g_string_new ("");
+  g_autofree char *enc2_body = NULL;
+  g_autofree char *arg = NULL;
+  g_autoptr(GString) tb_arg = NULL;
+  int i;
+  gboolean success;
+  const char *is_tb_snap;
+  const char *old_cmdline;
+
+  tb_arg = g_string_new ("");
+
+  enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
+
+  // Thunderbird would interpret in body HTML-Code (only in this start-way ; not by mailto:).
+  // Maybe just characters < > are required to be replaced.
+  if (body)
+    for (i = 0; body[i]; i++)
+      {
+        switch (body[i])
+          {
+          case '<':
+            g_string_append (enc1_body, "&lt;");
+            break;
+          case '>':
+            g_string_append (enc1_body, "&gt;");
+            break;
+          case '&':
+            g_string_append (enc1_body, "&amp;");
+            break;
+          case '"':
+            g_string_append (enc1_body, "&quot;");
+            break;
+          case '\'':
+            g_string_append (enc1_body, "&apos;");
+            break;
+          default:
+            g_string_append_c (enc1_body, body[i]);
+          }
+      }
+  enc2_body = g_uri_escape_string (enc1_body->str ? enc1_body->str : "", NULL, FALSE);
+
+  /* First start with attachment:
+   *   This may prevent malicous input data. Example:
+   *     Previous used of attachment= within an Email-Adresse.
+   *     That shouldn't work, but just in case. */
+  if (attachments)
+    {
+      g_string_append_printf (tb_arg, "attachment='");
+      int files_added = 0;
+      for (i = 0; attachments[i]; i++)
+        {
+          if (attachments[i][0] == '\0')
+            continue; // skip empty entrys (e.g. because file not found before)
+          files_added++;
+          if (files_added != 1)
+            g_string_append_printf (tb_arg, ",");
+          g_string_append_printf (tb_arg, "%s", attachments[i]);
+        }
+        g_string_append_printf(tb_arg, "',");
+    }
+
+  if (addrs)
+    {
+      g_string_append_printf (tb_arg, "to='");
+      for (i = 0; addrs[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", escape_maybe_single_quote_comma (addrs[i]));
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  if (cc)
+    {
+      g_string_append_printf (tb_arg, "cc='");
+      for (i = 0; cc[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", escape_maybe_single_quote_comma (cc[i]));
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  if (bcc)
+    {
+      g_string_append_printf (tb_arg, "bcc='");
+      for (i = 0; bcc[i]; i++)
+          g_string_append_printf (tb_arg, "%s,", escape_maybe_single_quote_comma (bcc[i]));
+      g_string_append_printf (tb_arg, "',");
+    }
+
+  g_string_append_printf (tb_arg, "subject='%s',", enc_subject);
+  g_string_append_printf (tb_arg, "body=%s,", enc2_body);
+
+  /* The commandline can be complicated, e.g.
+   * env BAMF_DESKTOP_FILE_HINT=/var/lib/snapd/.../thunderbird_thunderbird.desktop /snap/bin/thunderbird %u
+   * so just match for thunderbird.
+   */
+  old_cmdline = g_app_info_get_commandline (info);
+  is_tb_snap = strstr (old_cmdline, "/snap/bin/thunderbird");
+  gchar *cmdline[] = {
+      is_tb_snap ? "/snap/bin/thunderbird" : "thunderbird",
+      "-compose",
+      tb_arg->str,
+      NULL
+  };
+
+  g_debug ("Launching: %s %s %s", cmdline[0], cmdline[1], cmdline[2]);
+  success = g_spawn_async (NULL, cmdline, NULL, G_SPAWN_SEARCH_PATH, NULL,
+                           NULL, NULL, error);
+  return success;
+}
+
+static const char **
+process_attachment_list (const char ** attachments)
+{
+  g_autoptr(GStrvBuilder) builder = g_strv_builder_new ();
+  int i = 0;
+  for (i = 0; attachments[i]; i++)
+    {
+      const char *uri = get_uri_for_tb (attachments[i]);
+      g_strv_builder_add (builder, uri);
+    }
+  return (const char **) g_strv_builder_end (builder);
+}
+
 gboolean
 compose_mail (const char * const *addrs,
               const char * const *cc,
@@ -126,16 +307,13 @@ compose_mail (const char * const *addrs,
     is_thunderbird = TRUE;
 
   if (is_thunderbird && attachments != no_att)
-    {
-      if (compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
-        return TRUE;
-    }
-  else
-    {
-      if (compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error))
-        return TRUE;
-    }
-  return FALSE;
+  {
+    const char ** attachments_processed = process_attachment_list (attachments);
+    if (attachments_processed[0] != NULL)
+      return compose_mail_thunderbird (info, (const char * const *)addrs, cc, bcc, subject, body, attachments_processed, error);
+  }
+
+  return compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, error);
 }
 
 static gboolean
@@ -148,30 +326,18 @@ handle_compose_email (XdpImplEmail *object,
 {
   g_autoptr(Request) request = NULL;
   const char *sender;
-  GVariantBuilder opt_builder;
-  guint response = 0;
   g_autoptr(GError) error = NULL;
   const char *address = NULL;
   const char *subject = NULL;
   const char *body = NULL;
   const char *no_att[1] = { NULL };
   const char **attachments = no_att;
+  guint response = 0;
+  GVariantBuilder opt_builder;
   const char * const *addresses = NULL;
   const char * const *cc = NULL;
   const char * const *bcc = NULL;
   g_auto(GStrv) addrs = NULL;
-
-  g_autoptr(GAppInfo) info = NULL;
-  gboolean is_thunderbird = FALSE;
-  const char *commandline;
-
-  info = g_app_info_get_default_for_uri_scheme ("mailto");
-  if (info != NULL)
-    {
-      commandline = g_app_info_get_commandline (info);
-      if (strstr (commandline, "thunderbird") )
-        is_thunderbird = TRUE;
-    }
 
   sender = g_dbus_method_invocation_get_sender (invocation);
 
@@ -194,9 +360,10 @@ handle_compose_email (XdpImplEmail *object,
           addrs[0] = g_strdup (address);
           memcpy (addrs + 1, addresses, sizeof (char *) * (len + 1));
         }
+        
       else
         {
-          addrs = g_new (char *, 2);
+          addrs = g_new (char *, 2); 
           addrs[0] = g_strdup (address);
           addrs[1] = NULL;
         }
@@ -204,26 +371,14 @@ handle_compose_email (XdpImplEmail *object,
   else
     addrs = g_strdupv ((char **)addresses);
 
-  commandline = g_app_info_get_commandline (info);
-  if (strstr (commandline, "thunderbird") )
-    is_thunderbird = TRUE;
+  if (!compose_mail ((const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
+    response = 2;
 
-  if (attachments != no_att && is_thunderbird )
-    return handle_compose_email_tb (object, invocation, arg_handle, arg_app_id, arg_parent_window, arg_options,
-                                    (const char * const *)addrs, cc, bcc, subject, body, attachments);
-  else
-    {
-      if (!compose_mail_mailto (info, (const char * const *)addrs, cc, bcc, subject, body, attachments, NULL))
-        response = 2;
-
-      g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
-      xdp_impl_email_complete_compose_email (object,
-                                             invocation,
-                                             response,
-                                             g_variant_builder_end (&opt_builder));
-
-      return TRUE;
-    }
+  g_variant_builder_init (&opt_builder, G_VARIANT_TYPE_VARDICT);
+  xdp_impl_email_complete_compose_email (object,
+                                         invocation,
+                                         response,
+                                         g_variant_builder_end (&opt_builder));
 
   return TRUE;
 }

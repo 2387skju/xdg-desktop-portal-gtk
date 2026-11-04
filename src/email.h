@@ -22,12 +22,4 @@
 
 #include <gio/gio.h>
 
-gboolean email_init   (GDBusConnection *bus, GError **error);
-
-gboolean compose_mail (const char * const *addrs,
-                       const char * const *cc,
-                       const char * const *bcc,
-                       const char         *subject,
-                       const char         *body,
-                       const char        **attachments,
-                       GError            **error);
+gboolean email_init (GDBusConnection *bus, GError **error);

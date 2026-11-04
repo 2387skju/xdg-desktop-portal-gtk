@@ -11,8 +11,6 @@ portal_sources = files(
   'account.c',
   'accountdialog.c',
   'email.c',
-  'emailtb.c',
-  'emailtbdialog.c',
   'gtkbackports.c',
   'externalwindow.c',
   'dynamic-launcher.c',

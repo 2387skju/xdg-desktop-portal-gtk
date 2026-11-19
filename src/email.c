@@ -22,6 +22,7 @@
 #include "request.h"
 #include "utils.h"
 
+/*
 static gboolean
 compose_mail_mailto (GAppInfo       *info,
                      const char * const *addrs,
@@ -97,6 +98,80 @@ compose_mail_mailto (GAppInfo       *info,
 
   return success;
 }
+*/
+
+static gboolean
+compose_mail_xdg_email (GAppInfo       *info,
+                     const char * const *addrs,
+                     const char * const *cc,
+                     const char * const *bcc,
+                     const char     *subject,
+                     const char     *body,
+                     const char    **attachments,
+                     GError        **error)
+{
+  g_autofree char *enc_subject = NULL;
+  g_autofree char *enc_body = NULL;
+  g_autoptr(GString) params = NULL;
+  int i;
+
+  enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
+  enc_body = g_uri_escape_string (body ? body : "", NULL, FALSE);
+
+  params = g_string_new ("xdg-email");
+  if (cc)
+    {
+      for (i = 0; cc[i]; i++)
+       {
+         char* quoted = g_shell_quote(cc[i]);
+         g_string_append_printf (params, " --cc %s", quoted);
+         free (quoted);
+       }
+    }
+
+  if (bcc)
+    {
+      for (i = 0; bcc[i]; i++)
+       {
+         char* quoted = g_shell_quote(bcc[i]);
+         g_string_append_printf (params, " --bcc %s", quoted);
+         free (quoted);
+       }
+    }
+
+  if (subject)
+    g_string_append_printf (params, " --subject %s", enc_subject);
+  if (body)
+    g_string_append_printf (params, " --body %s", enc_body);
+
+  for (i = 0; attachments[i]; i++)
+    {
+      char* quoted = g_shell_quote(attachments[i]);
+      g_string_append_printf (params, " --attach %s", quoted);
+      free (quoted);
+    }
+
+  g_string_append (params, " mailto:"); //mailto: itself is optional
+  if (addrs)
+    {
+      for (i = 0; addrs[i]; i++)
+        {
+          if (i > 0)
+            g_string_append (params, ",");
+          char* quoted = g_shell_quote(addrs[i]);
+          g_string_append_printf (params, "%s", quoted);
+          free (quoted);
+        }
+    }
+
+  //@TODO: g_debug ("Launching: %s\n", ... );
+
+  char* standard_output;
+  gchar *cmdline= params->str;
+  if (g_spawn_command_line_sync (cmdline, &standard_output, NULL, NULL, NULL))
+    return TRUE;
+  return FALSE;
+}
 
 static gboolean
 compose_mail (const char * const *addrs,
@@ -109,14 +184,13 @@ compose_mail (const char * const *addrs,
 {
   g_autoptr(GAppInfo) info = NULL;
 
-  info = g_app_info_get_default_for_uri_scheme ("mailto");
+  info = g_app_info_create_from_commandline ( "xdg-email", "xdg-email", G_APP_INFO_CREATE_SUPPORTS_URIS, NULL);
   if (info == NULL)
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
-      return FALSE;
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No xdg-Email found");
     }
 
-  return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
+  return compose_mail_xdg_email(info, addrs, cc, bcc, subject, body, attachments, error);
 }
 
 static gboolean

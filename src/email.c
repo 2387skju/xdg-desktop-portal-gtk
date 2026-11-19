@@ -182,22 +182,21 @@ compose_mail (const char * const *addrs,
 {
   g_autoptr(GAppInfo) info = NULL;
 
-  info = g_app_info_create_from_commandline ( "xdg-email", "xdg-email", G_APP_INFO_CREATE_SUPPORTS_URIS, NULL);
-  if (info == NULL)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No xdg-Email found");
-      g_free (info);
-      info = g_app_info_get_default_for_uri_scheme ("mailto");
-      if (info == NULL)
-        {
-          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
-          return FALSE;
-        }
-      g_debug ("Fallback to legacy method\n");
-      return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
-    }
+  info = g_app_info_create_from_commandline ("xdg-email", "xdg-email", G_APP_INFO_CREATE_SUPPORTS_URIS, NULL);
+  if (info != NULL)
+  {
+    if (compose_mail_xdg_email (info, addrs, cc, bcc, subject, body, attachments, error))
+      return TRUE;
+    g_free (info);
+  }
 
-  return compose_mail_xdg_email(info, addrs, cc, bcc, subject, body, attachments, error);
+  g_debug ("Try fallback to legacy method\n");
+  info = g_app_info_get_default_for_uri_scheme ("mailto");
+  if (info != NULL)
+    return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
+  g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
+
+  return FALSE;
 }
 
 static gboolean

@@ -22,7 +22,6 @@
 #include "request.h"
 #include "utils.h"
 
-/*
 static gboolean
 compose_mail_mailto (GAppInfo       *info,
                      const char * const *addrs,
@@ -98,7 +97,6 @@ compose_mail_mailto (GAppInfo       *info,
 
   return success;
 }
-*/
 
 static gboolean
 compose_mail_xdg_email (GAppInfo       *info,
@@ -188,6 +186,15 @@ compose_mail (const char * const *addrs,
   if (info == NULL)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No xdg-Email found");
+      g_free (info);
+      info = g_app_info_get_default_for_uri_scheme ("mailto");
+      if (info == NULL)
+        {
+          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
+          return FALSE;
+        }
+      g_debug ("Fallback to legacy method\n");
+      return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
     }
 
   return compose_mail_xdg_email(info, addrs, cc, bcc, subject, body, attachments, error);

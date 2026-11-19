@@ -5,7 +5,8 @@ Released:
 - Email: change to xdg-email
   All emails will be now processed by xdg-email.
   This adds support of attachment for Email-Client Thunderbird.
-  This adds new dependency to package xdg-utils
+  This adds new dependency to package xdg-utils,
+  otherwise it will fallback to legacy method.
 
 Changes in 1.15.3
 =================

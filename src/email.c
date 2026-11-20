@@ -22,6 +22,31 @@
 #include "request.h"
 #include "utils.h"
 
+// check version of xdg-email
+// returns: -1 = error | 0 = minimal version does NOT fit | 1 = minimal version does fit
+int checkversion_tool_xdg_email (int min_major, int min_minor)
+{
+  int output = -1;
+  char* standard_output;
+  gchar *cmdline = "xdg-email --version";
+  if (!g_spawn_command_line_sync (cmdline, &standard_output, NULL, NULL, NULL))
+    return -1;
+  const char *version_string = strchr (standard_output, ' ');
+  if (version_string != NULL)
+  {
+    char **version = g_strsplit (version_string, ".", 3);
+    if ( *(version[0]) != '\0' && *(version[1]) != '\0')
+    {
+      output = 0;
+      if( (atoi (version[0]) == min_major && atoi (version[1]) >= min_minor) ||
+          (atoi (version[0]) > min_major) )
+        output = 1;
+    }
+    g_strfreev (version);
+  }
+  return output;
+}
+
 static gboolean
 compose_mail_mailto (GAppInfo       *info,
                      const char * const *addrs,
@@ -108,22 +133,20 @@ compose_mail_xdg_email (GAppInfo       *info,
                      const char    **attachments,
                      GError        **error)
 {
-  g_autofree char *enc_subject = NULL;
-  g_autofree char *enc_body = NULL;
   g_autoptr(GString) params = NULL;
+  g_autoptr(GList) uris = NULL;
   int i;
-
-  enc_subject = g_uri_escape_string (subject ? subject : "", NULL, FALSE);
-  enc_body = g_uri_escape_string (body ? body : "", NULL, FALSE);
+  gboolean success;
+  const char *sep;
 
   params = g_string_new ("xdg-email");
   if (cc)
     {
       for (i = 0; cc[i]; i++)
        {
-         char* quoted = g_shell_quote(cc[i]);
+         char* quoted = g_shell_quote (cc[i]);
          g_string_append_printf (params, " --cc %s", quoted);
-         free (quoted);
+         g_free (quoted);
        }
     }
 
@@ -131,40 +154,85 @@ compose_mail_xdg_email (GAppInfo       *info,
     {
       for (i = 0; bcc[i]; i++)
        {
-         char* quoted = g_shell_quote(bcc[i]);
+         char* quoted = g_shell_quote (bcc[i]);
          g_string_append_printf (params, " --bcc %s", quoted);
-         free (quoted);
+         g_free (quoted);
        }
     }
 
   if (subject)
-    g_string_append_printf (params, " --subject %s", enc_subject);
+    {
+      char* quoted = g_shell_quote (subject);
+      g_string_append_printf (params, " --subject %s", quoted);
+      g_free (quoted);
+    }
   if (body)
-    g_string_append_printf (params, " --body %s", enc_body);
+    {
+      char *body_proccessed = body;
+      if (info != NULL)
+        {
+          const char *commandline_mailto_handler;
+          commandline_mailto_handler = g_app_info_get_commandline (info); //or maybe g_strdup(g_app_info_get_executable (app_info));
+          if (strstr (commandline, "thunderbird") || strstr (commandline, "betterbird") )
+            {
+               // Thunderbird special style would interpret the HTML code in BODY.
+               // That's different from how mailto: behaves.
+               // So, we convert it to HTML-Entities.
+               body_proccessed = g_markup_escape_text (body, -1);
+            }
+      }
+      char* quoted = g_shell_quote (body_proccessed);
+      g_string_append_printf (params, " --body %s", quoted);
+      g_free (quoted);
+      g_string_free (body_processed, TRUE);
+    }
 
   for (i = 0; attachments[i]; i++)
     {
-      char* quoted = g_shell_quote(attachments[i]);
+      char* quoted = g_shell_quote (attachments[i]);
       g_string_append_printf (params, " --attach %s", quoted);
-      free (quoted);
+      g_free (quoted);
     }
 
-  g_string_append (params, " mailto:"); //mailto: itself is optional
+  g_string_append (params, " \"mailto:");
+  //@TODO:escape of " needed?
   if (addrs)
     {
+      GString * addrs_str = g_string_new ("");
       for (i = 0; addrs[i]; i++)
         {
           if (i > 0)
-            g_string_append (params, ",");
-          char* quoted = g_shell_quote(addrs[i]);
-          g_string_append_printf (params, "%s", quoted);
-          free (quoted);
+            g_string_append (addrs_str, ",");
+          g_string_append_printf (addrs_str, "%s", addrs[i]);
         }
+      //does not work here: g_shell_quote
+      g_string_append (params, addrs_str->str);
+      g_string_free (addrs_str, TRUE);
     }
 
-  //@TODO: g_debug ("Launching: %s\n", ... );
+  //@TODO:escape of " needed?
+  // Simplification (not sure): This Version check is only needed for Thunderbird.
+  //    So, we can alternitve use the Thunderbird detection from before,
+  //    and maybe skip some code (at least at the current state of xdg-email)
+  if (checkversion_tool_xdg_email (1,3) == 1)
+  {
+      for (i = 0; attachments[i]; i++)
+      {
+        //needed for Thunderbird only:
+        // The files can parallel (dublicate) with --attach attached
+        // (only since xdg-email v. 1.3)
+        if (i == 0)
+          g_string_append (params, "?");
+        else
+          g_string_append (params, "&");
+        //does not work here: g_shell_quote
+        g_string_append_printf (params, "attach=%s", attachments[i]);
+      }
+  }
+  g_string_append (params, "\"");
 
-  char* standard_output;
+  char* standard_output; //@TODO: need to freed
+  g_warning ("Launching: %s\n", params->str );
   gchar *cmdline= params->str;
   if (g_spawn_command_line_sync (cmdline, &standard_output, NULL, NULL, NULL))
     return TRUE;
@@ -181,17 +249,12 @@ compose_mail (const char * const *addrs,
               GError     **error)
 {
   g_autoptr(GAppInfo) info = NULL;
-
-  info = g_app_info_create_from_commandline ("xdg-email", "xdg-email", G_APP_INFO_CREATE_SUPPORTS_URIS, NULL);
-  if (info != NULL)
-  {
-    if (compose_mail_xdg_email (info, addrs, cc, bcc, subject, body, attachments, error))
-      return TRUE;
-    g_free (info);
-  }
-
-  g_debug ("Try fallback to legacy method\n");
   info = g_app_info_get_default_for_uri_scheme ("mailto");
+
+  if (compose_mail_xdg_email (info, addrs, cc, bcc, subject, body, attachments, error))
+    return TRUE;
+
+  g_warning ("Try fallback to legacy method\n");
   if (info != NULL)
     return compose_mail_mailto (info, addrs, cc, bcc, subject, body, attachments, error);
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "No mailto handler");
